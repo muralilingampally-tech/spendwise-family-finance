@@ -1,30 +1,26 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    function signedIn() {
-      return request.auth != null;
+    // Allow-list of the two accounts that share this workspace. Keep in sync
+    // with VITE_ALLOWED_EMAILS / src/lib/firebase.ts.
+    function allowed() {
+      return request.auth != null &&
+        request.auth.token.email in [
+          'muralik0909@gmail.com',
+          'gatlarajeshwari09@gmail.com'
+        ];
     }
-    function memberOf(familyId) {
-      return signedIn() &&
-        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.familyId == familyId;
-    }
-    function roleIn(familyId, roles) {
-      return memberOf(familyId) &&
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in roles;
-    }
+
     // A user document is readable/writable only by its owner.
     match /users/{userId} {
-      allow read, write: if signedIn() && request.auth.uid == userId;
+      allow read, write: if allowed() && request.auth.uid == userId;
     }
+
     match /families/{familyId} {
-      // Bootstrap: a signed-in user owns the family whose id equals their uid.
-      allow read, write: if memberOf(familyId) || request.auth.uid == familyId;
-      // Masters and transactions: family members read, admins/members write.
-      match /{collection}/{docId} {
-        allow read: if memberOf(familyId) || request.auth.uid == familyId;
-        allow create, update: if request.auth.uid == familyId || roleIn(familyId, ['admin', 'member']);
-        allow delete: if request.auth.uid == familyId || roleIn(familyId, ['admin']);
+      allow read, write: if allowed();
+      // Masters, transactions and the member directory.
+      match /{document=**} {
+        allow read, write: if allowed();
       }
     }
   }
