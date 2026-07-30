@@ -17,6 +17,7 @@ const now = () => new Date().toISOString();
 interface AppState {
   ready: boolean;
   authError: string | null;
+  dataError: string | null;
   loading: boolean;
   user: AppUser | null;
   masters: Record<MasterCollection, MasterItem[]>;
@@ -44,6 +45,7 @@ let initialised = false;
 export const useApp = create<AppState>((set, get) => ({
   ready: false,
   authError: null,
+  dataError: null,
   loading: false,
   user: null,
   masters: emptyMasters,
@@ -59,8 +61,15 @@ export const useApp = create<AppState>((set, get) => ({
       if (user) {
         try {
           await seedFamilyMasters(user.familyId);
+          set({ dataError: null });
         } catch (error) {
           console.error("Seeding master data failed", error);
+          set({
+            dataError:
+              error instanceof Error && /permission|insufficient/i.test(error.message)
+                ? "Firestore denied access. Deploy the security rules (firebase deploy --only firestore:rules) and make sure you are signed in with an allow-listed email."
+                : (error instanceof Error ? error.message : "Could not load family data."),
+          });
         }
         try {
           await get().refresh();
