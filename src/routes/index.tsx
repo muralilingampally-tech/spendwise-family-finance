@@ -185,6 +185,10 @@ function Dashboard() {
             View all
           </Link>
         </div>
+          <Link to="/transactions" className="text-sm text-primary hover:underline">
+            View all
+          </Link>
+        </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="bg-muted/60 text-left text-xs uppercase tracking-wide text-muted-foreground">
