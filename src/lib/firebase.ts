@@ -41,8 +41,13 @@ export const isFirebaseConfigured = Boolean(config.apiKey && config.projectId &&
  */
 export const sharedFamilyId = env.VITE_FAMILY_ID?.trim() || "our-family";
 
-/** Optional allow-list — only these email addresses may use the app. */
-export const allowedEmails = (env.VITE_ALLOWED_EMAILS ?? "")
+/**
+ * Access allow-list — only these email addresses may use the app.
+ * Override with VITE_ALLOWED_EMAILS (comma separated).
+ */
+const defaultAllowedEmails = "muralik0909@gmail.com,gatlarajeshwari09@gmail.com";
+
+export const allowedEmails = (env.VITE_ALLOWED_EMAILS ?? defaultAllowedEmails)
   .split(",")
   .map((e) => e.trim().toLowerCase())
   .filter(Boolean);

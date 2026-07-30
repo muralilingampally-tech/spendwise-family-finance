@@ -40,8 +40,17 @@ export interface Transaction {
   amount: number;
   remarks: string;
   createdBy: string;
+  /** Denormalised display name of the person the entry belongs to. */
+  createdByName?: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface Member {
+  id: string; // uid
+  email?: string | null;
+  displayName?: string | null;
+  role?: Role;
 }
 
 export const MASTER_LABELS: Record<MasterCollection, { title: string; singular: string }> = {
