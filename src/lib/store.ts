@@ -1,6 +1,6 @@
 import { create } from "zustand";
-import { getFirebaseAuth, isFirebaseConfigured } from "./firebase";
-import { loadMasters, loadTransactions, repo, seedFamilyMasters } from "./repo";
+import { getFirebaseAuth, isEmailAllowed, isFirebaseConfigured, sharedFamilyId } from "./firebase";
+import { ensureMembership, loadMasters, loadTransactions, repo, seedFamilyMasters } from "./repo";
 import type { AppUser, MasterCollection, MasterItem, Transaction } from "./types";
 
 const emptyMasters = {
@@ -16,6 +16,7 @@ const now = () => new Date().toISOString();
 
 interface AppState {
   ready: boolean;
+  authError: string | null;
   loading: boolean;
   user: AppUser | null;
   masters: Record<MasterCollection, MasterItem[]>;
@@ -41,6 +42,7 @@ let initialised = false;
 
 export const useApp = create<AppState>((set, get) => ({
   ready: false,
+  authError: null,
   loading: false,
   user: null,
   masters: emptyMasters,
@@ -71,18 +73,28 @@ export const useApp = create<AppState>((set, get) => ({
       const { auth, mod } = await getFirebaseAuth();
       await mod.setPersistence(auth, mod.browserLocalPersistence);
       mod.onAuthStateChanged(auth, (fbUser) => {
-        void boot(
-          fbUser
-            ? {
-                uid: fbUser.uid,
-                email: fbUser.email,
-                displayName: fbUser.displayName,
-                photoURL: fbUser.photoURL,
-                familyId: fbUser.uid,
-                role: "admin",
-              }
-            : null,
-        );
+        void (async () => {
+          if (!fbUser) return boot(null);
+          if (!isEmailAllowed(fbUser.email)) {
+            await mod.signOut(auth);
+            set({ authError: "This account is not allowed to access this workspace." });
+            return boot(null);
+          }
+          const familyId = sharedFamilyId ?? fbUser.uid;
+          await ensureMembership(fbUser.uid, familyId, {
+            email: fbUser.email,
+            displayName: fbUser.displayName,
+            role: "admin",
+          });
+          await boot({
+            uid: fbUser.uid,
+            email: fbUser.email,
+            displayName: fbUser.displayName,
+            photoURL: fbUser.photoURL,
+            familyId,
+            role: "admin",
+          });
+        })();
       });
     })();
   },

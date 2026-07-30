@@ -26,7 +26,7 @@ type FormValues = { name: string; email: string; password: string };
 
 function AuthPage() {
   const navigate = useNavigate();
-  const { ready, user, init, signInWithGoogle, signInWithEmail, signUpWithEmail, resetPassword } =
+  const { ready, user, authError, init, signInWithGoogle, signInWithEmail, signUpWithEmail, resetPassword } =
     useApp();
   const [mode, setMode] = useState<Mode>("signin");
   const [busy, setBusy] = useState(false);
@@ -35,6 +35,9 @@ function AuthPage() {
   });
 
   useEffect(() => init(), [init]);
+  useEffect(() => {
+    if (authError) toast.error(authError);
+  }, [authError]);
   useEffect(() => {
     if (ready && user) navigate({ to: "/", replace: true });
   }, [ready, user, navigate]);

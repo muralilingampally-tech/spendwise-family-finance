@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as TransactionsRouteImport } from './routes/transactions'
 import { Route as SettingsRouteImport } from './routes/settings'
+import { Route as ReportsRouteImport } from './routes/reports'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as MastersTypeRouteImport } from './routes/masters.$type'
@@ -23,6 +24,11 @@ const TransactionsRoute = TransactionsRouteImport.update({
 const SettingsRoute = SettingsRouteImport.update({
   id: '/settings',
   path: '/settings',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ReportsRoute = ReportsRouteImport.update({
+  id: '/reports',
+  path: '/reports',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AuthRoute = AuthRouteImport.update({
@@ -44,6 +50,7 @@ const MastersTypeRoute = MastersTypeRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
+  '/reports': typeof ReportsRoute
   '/settings': typeof SettingsRoute
   '/transactions': typeof TransactionsRoute
   '/masters/$type': typeof MastersTypeRoute
@@ -51,6 +58,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
+  '/reports': typeof ReportsRoute
   '/settings': typeof SettingsRoute
   '/transactions': typeof TransactionsRoute
   '/masters/$type': typeof MastersTypeRoute
@@ -59,19 +67,33 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
+  '/reports': typeof ReportsRoute
   '/settings': typeof SettingsRoute
   '/transactions': typeof TransactionsRoute
   '/masters/$type': typeof MastersTypeRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/auth' | '/settings' | '/transactions' | '/masters/$type'
+  fullPaths:
+    | '/'
+    | '/auth'
+    | '/reports'
+    | '/settings'
+    | '/transactions'
+    | '/masters/$type'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/auth' | '/settings' | '/transactions' | '/masters/$type'
+  to:
+    | '/'
+    | '/auth'
+    | '/reports'
+    | '/settings'
+    | '/transactions'
+    | '/masters/$type'
   id:
     | '__root__'
     | '/'
     | '/auth'
+    | '/reports'
     | '/settings'
     | '/transactions'
     | '/masters/$type'
@@ -80,6 +102,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AuthRoute: typeof AuthRoute
+  ReportsRoute: typeof ReportsRoute
   SettingsRoute: typeof SettingsRoute
   TransactionsRoute: typeof TransactionsRoute
   MastersTypeRoute: typeof MastersTypeRoute
@@ -99,6 +122,13 @@ declare module '@tanstack/react-router' {
       path: '/settings'
       fullPath: '/settings'
       preLoaderRoute: typeof SettingsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/reports': {
+      id: '/reports'
+      path: '/reports'
+      fullPath: '/reports'
+      preLoaderRoute: typeof ReportsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/auth': {
@@ -128,6 +158,7 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuthRoute: AuthRoute,
+  ReportsRoute: ReportsRoute,
   SettingsRoute: SettingsRoute,
   TransactionsRoute: TransactionsRoute,
   MastersTypeRoute: MastersTypeRoute,
