@@ -14,7 +14,7 @@
  * Firestore rules, not by hiding this config. Env vars still win if set.
  */
 const defaults = {
-  apiKey: "__FIREBASE_API_KEY__",
+  apiKey: "AIzaSyBnr_ptNwg8KZA9MZSqn9cqZMLovopGe2A",
   authDomain: "spendwise-1d96c.firebaseapp.com",
   projectId: "spendwise-1d96c",
   storageBucket: "spendwise-1d96c.firebasestorage.app",
