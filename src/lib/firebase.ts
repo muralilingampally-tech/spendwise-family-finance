@@ -8,13 +8,29 @@
  * When the config is absent the app falls back to a local (browser-storage)
  * data layer so the UI is fully usable before Firebase is connected.
  */
+/**
+ * Defaults for the connected Firebase project (spendwise-1d96c). These are
+ * publishable web-app identifiers — Firebase security is enforced by Auth +
+ * Firestore rules, not by hiding this config. Env vars still win if set.
+ */
+const defaults = {
+  apiKey: "__FIREBASE_API_KEY__",
+  authDomain: "spendwise-1d96c.firebaseapp.com",
+  projectId: "spendwise-1d96c",
+  storageBucket: "spendwise-1d96c.firebasestorage.app",
+  messagingSenderId: "341730373725",
+  appId: "1:341730373725:web:a63adbe2949ac361fb9db4",
+};
+
+const env = import.meta.env as Record<string, string | undefined>;
+
 const config = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY as string | undefined,
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN as string | undefined,
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID as string | undefined,
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET as string | undefined,
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID as string | undefined,
-  appId: import.meta.env.VITE_FIREBASE_APP_ID as string | undefined,
+  apiKey: env.VITE_FIREBASE_API_KEY || defaults.apiKey,
+  authDomain: env.VITE_FIREBASE_AUTH_DOMAIN || defaults.authDomain,
+  projectId: env.VITE_FIREBASE_PROJECT_ID || defaults.projectId,
+  storageBucket: env.VITE_FIREBASE_STORAGE_BUCKET || defaults.storageBucket,
+  messagingSenderId: env.VITE_FIREBASE_MESSAGING_SENDER_ID || defaults.messagingSenderId,
+  appId: env.VITE_FIREBASE_APP_ID || defaults.appId,
 };
 
 export const isFirebaseConfigured = Boolean(config.apiKey && config.projectId && config.appId);
@@ -23,11 +39,10 @@ export const isFirebaseConfigured = Boolean(config.apiKey && config.projectId &&
  * Shared workspace: both partners sign in with their own account but read/write
  * the same family data when VITE_FAMILY_ID is set to the same value.
  */
-export const sharedFamilyId =
-  (import.meta.env.VITE_FAMILY_ID as string | undefined)?.trim() || null;
+export const sharedFamilyId = env.VITE_FAMILY_ID?.trim() || "our-family";
 
 /** Optional allow-list — only these email addresses may use the app. */
-export const allowedEmails = ((import.meta.env.VITE_ALLOWED_EMAILS as string | undefined) ?? "")
+export const allowedEmails = (env.VITE_ALLOWED_EMAILS ?? "")
   .split(",")
   .map((e) => e.trim().toLowerCase())
   .filter(Boolean);
