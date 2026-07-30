@@ -41,6 +41,7 @@ type FormValues = {
   paymentSourceId: string;
   amount: string;
   remarks: string;
+  createdBy: string;
 };
 
 const emptyValues: FormValues = {
@@ -51,13 +52,14 @@ const emptyValues: FormValues = {
   paymentSourceId: "",
   amount: "",
   remarks: "",
+  createdBy: "",
 };
 
 const selectClass =
   "h-9 w-full rounded-md border border-input bg-background px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring";
 
 function TransactionsPage() {
-  const { transactions, masters, saveTransaction, deleteTransaction, user } = useApp();
+  const { transactions, masters, members, saveTransaction, deleteTransaction, user } = useApp();
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Transaction | null>(null);
   const [busy, setBusy] = useState(false);
@@ -68,6 +70,7 @@ function TransactionsPage() {
   const [to, setTo] = useState("");
   const [groupFilter, setGroupFilter] = useState("");
   const [sourceFilter, setSourceFilter] = useState("");
+  const [userFilter, setUserFilter] = useState("");
 
   const form = useForm<FormValues>({ defaultValues: emptyValues });
   const type = form.watch("type");
@@ -86,6 +89,23 @@ function TransactionsPage() {
     return (id: string | null) => (id ? (map.get(id) ?? "—") : "—");
   }, [masters]);
 
+  const memberName = useMemo(() => {
+    const map = new Map<string, string>();
+    members.forEach((m) => map.set(m.id, m.displayName || m.email || "Member"));
+    if (user) map.set(user.uid, user.displayName || user.email || "You");
+    return (t: Transaction) => map.get(t.createdBy) || t.createdByName || "Unknown";
+  }, [members, user]);
+
+  const memberOptions = useMemo(() => {
+    const map = new Map<string, string>();
+    members.forEach((m) => map.set(m.id, m.displayName || m.email || "Member"));
+    transactions.forEach((t) => {
+      if (t.createdBy && !map.has(t.createdBy)) map.set(t.createdBy, t.createdByName || "Unknown");
+    });
+    if (user) map.set(user.uid, user.displayName || user.email || "You");
+    return [...map.entries()].map(([id, name]) => ({ id, name }));
+  }, [members, transactions, user]);
+
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     return transactions.filter((t) => {
@@ -94,11 +114,13 @@ function TransactionsPage() {
       if (to && t.date > to) return false;
       if (groupFilter && t.groupId !== groupFilter) return false;
       if (sourceFilter && t.paymentSourceId !== sourceFilter) return false;
+      if (userFilter && t.createdBy !== userFilter) return false;
       if (!q) return true;
       return [
         t.date,
         String(t.amount),
         t.remarks,
+        memberName(t),
         nameOf(t.groupId),
         nameOf(t.subGroupId),
         nameOf(t.paymentSourceId),
@@ -107,7 +129,7 @@ function TransactionsPage() {
         .toLowerCase()
         .includes(q);
     });
-  }, [transactions, search, typeFilter, from, to, groupFilter, sourceFilter, nameOf]);
+  }, [transactions, search, typeFilter, from, to, groupFilter, sourceFilter, userFilter, nameOf, memberName]);
 
   const totals = useMemo(() => {
     let income = 0;
@@ -120,7 +142,7 @@ function TransactionsPage() {
 
   const openNew = () => {
     setEditing(null);
-    form.reset(emptyValues);
+    form.reset({ ...emptyValues, createdBy: user?.uid ?? "" });
     setOpen(true);
   };
 
@@ -134,6 +156,7 @@ function TransactionsPage() {
       paymentSourceId: t.paymentSourceId,
       amount: String(t.amount),
       remarks: t.remarks ?? "",
+      createdBy: t.createdBy ?? user?.uid ?? "",
     });
     setOpen(true);
   };
@@ -146,6 +169,7 @@ function TransactionsPage() {
     }
     setBusy(true);
     try {
+      const owner = memberOptions.find((m) => m.id === values.createdBy);
       await saveTransaction(
         {
           date: values.date,
@@ -155,6 +179,8 @@ function TransactionsPage() {
           paymentSourceId: values.paymentSourceId,
           amount,
           remarks: values.remarks.trim().slice(0, 500),
+          createdBy: values.createdBy || user?.uid,
+          createdByName: owner?.name ?? user?.displayName ?? user?.email ?? null,
         },
         editing?.id,
       );
