@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import { getFirebaseAuth, isEmailAllowed, isFirebaseConfigured, sharedFamilyId } from "./firebase";
-import { ensureMembership, loadMasters, loadTransactions, repo, seedFamilyMasters } from "./repo";
-import type { AppUser, MasterCollection, MasterItem, Transaction } from "./types";
+import { ensureMembership, loadMasters, loadMembers, loadTransactions, repo, seedFamilyMasters } from "./repo";
+import type { AppUser, MasterCollection, MasterItem, Member, Transaction } from "./types";
 
 const emptyMasters = {
   expenseGroups: [],
@@ -21,6 +21,7 @@ interface AppState {
   user: AppUser | null;
   masters: Record<MasterCollection, MasterItem[]>;
   transactions: Transaction[];
+  members: Member[];
   init: () => void;
   signInWithGoogle: () => Promise<void>;
   signInWithEmail: (email: string, password: string) => Promise<void>;
@@ -47,6 +48,7 @@ export const useApp = create<AppState>((set, get) => ({
   user: null,
   masters: emptyMasters,
   transactions: [],
+  members: [],
 
   init: () => {
     if (initialised || typeof window === "undefined") return;
@@ -55,10 +57,18 @@ export const useApp = create<AppState>((set, get) => ({
     const boot = async (user: AppUser | null) => {
       set({ user });
       if (user) {
-        await seedFamilyMasters(user.familyId);
-        await get().refresh();
+        try {
+          await seedFamilyMasters(user.familyId);
+        } catch (error) {
+          console.error("Seeding master data failed", error);
+        }
+        try {
+          await get().refresh();
+        } catch (error) {
+          console.error("Loading family data failed", error);
+        }
       } else {
-        set({ masters: emptyMasters, transactions: [] });
+        set({ masters: emptyMasters, transactions: [], members: [] });
       }
       set({ ready: true });
     };
@@ -81,11 +91,15 @@ export const useApp = create<AppState>((set, get) => ({
             return boot(null);
           }
           const familyId = sharedFamilyId ?? fbUser.uid;
-          await ensureMembership(fbUser.uid, familyId, {
-            email: fbUser.email,
-            displayName: fbUser.displayName,
-            role: "admin",
-          });
+          try {
+            await ensureMembership(fbUser.uid, familyId, {
+              email: fbUser.email,
+              displayName: fbUser.displayName ?? fbUser.email,
+              role: "admin",
+            });
+          } catch (error) {
+            console.error("Registering membership failed", error);
+          }
           await boot({
             uid: fbUser.uid,
             email: fbUser.email,
@@ -129,7 +143,7 @@ export const useApp = create<AppState>((set, get) => ({
   signOut: async () => {
     if (!isFirebaseConfigured) {
       window.localStorage.removeItem(LOCAL_USER_KEY);
-      set({ user: null, masters: emptyMasters, transactions: [] });
+      set({ user: null, masters: emptyMasters, transactions: [], members: [] });
       return;
     }
     const { auth, mod } = await getFirebaseAuth();
@@ -141,11 +155,12 @@ export const useApp = create<AppState>((set, get) => ({
     if (!user) return;
     set({ loading: true });
     try {
-      const [masters, transactions] = await Promise.all([
+      const [masters, transactions, members] = await Promise.all([
         loadMasters(user.familyId),
         loadTransactions(user.familyId),
+        loadMembers(user.familyId).catch(() => [] as Member[]),
       ]);
-      set({ masters, transactions });
+      set({ masters, transactions, members });
     } finally {
       set({ loading: false });
     }
@@ -185,7 +200,9 @@ export const useApp = create<AppState>((set, get) => ({
     } else {
       await repo.create(user.familyId, "transactions", {
         ...values,
-        createdBy: user.uid,
+        createdBy: values.createdBy ?? user.uid,
+        createdByName:
+          values.createdByName ?? user.displayName ?? user.email ?? "Unknown",
         createdAt: now(),
         updatedAt: now(),
       });
