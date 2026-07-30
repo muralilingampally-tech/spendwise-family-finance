@@ -19,6 +19,22 @@ const config = {
 
 export const isFirebaseConfigured = Boolean(config.apiKey && config.projectId && config.appId);
 
+/**
+ * Shared workspace: both partners sign in with their own account but read/write
+ * the same family data when VITE_FAMILY_ID is set to the same value.
+ */
+export const sharedFamilyId =
+  (import.meta.env.VITE_FAMILY_ID as string | undefined)?.trim() || null;
+
+/** Optional allow-list — only these email addresses may use the app. */
+export const allowedEmails = ((import.meta.env.VITE_ALLOWED_EMAILS as string | undefined) ?? "")
+  .split(",")
+  .map((e) => e.trim().toLowerCase())
+  .filter(Boolean);
+
+export const isEmailAllowed = (email: string | null | undefined) =>
+  allowedEmails.length === 0 || (!!email && allowedEmails.includes(email.toLowerCase()));
+
 let appPromise: Promise<unknown> | null = null;
 
 async function getApp() {
