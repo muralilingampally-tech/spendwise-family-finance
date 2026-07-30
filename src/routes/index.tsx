@@ -38,7 +38,7 @@ export const Route = createFileRoute("/")({
 });
 
 function Dashboard() {
-  const { transactions, masters } = useApp();
+  const { transactions, masters, members, user } = useApp();
 
   const nameOf = useMemo(() => {
     const map = new Map<string, string>();
@@ -47,6 +47,26 @@ function Dashboard() {
       .forEach((m) => map.set(m.id, m.name));
     return (id: string | null) => (id ? (map.get(id) ?? "—") : "—");
   }, [masters]);
+
+  const memberName = useMemo(() => {
+    const map = new Map<string, string>();
+    members.forEach((m) => map.set(m.id, m.displayName || m.email || "Member"));
+    if (user) map.set(user.uid, user.displayName || user.email || "You");
+    return (t: (typeof transactions)[number]) =>
+      map.get(t.createdBy) || t.createdByName || "Unknown";
+  }, [members, user, transactions]);
+
+  const byUser = useMemo(() => {
+    const map = new Map<string, { name: string; Income: number; Expense: number }>();
+    transactions.forEach((t) => {
+      const name = memberName(t);
+      const row = map.get(name) ?? { name, Income: 0, Expense: 0 };
+      if (t.type === "income") row.Income += Number(t.amount);
+      else row.Expense += Number(t.amount);
+      map.set(name, row);
+    });
+    return [...map.values()].sort((a, b) => b.Expense - a.Expense);
+  }, [transactions, memberName]);
 
   const totals = useMemo(() => {
     let income = 0;

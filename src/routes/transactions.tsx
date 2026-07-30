@@ -244,6 +244,18 @@ function TransactionsPage() {
             </option>
           ))}
         </select>
+        <select
+          className={selectClass}
+          value={userFilter}
+          onChange={(e) => setUserFilter(e.target.value)}
+        >
+          <option value="">All users</option>
+          {memberOptions.map((m) => (
+            <option key={m.id} value={m.id}>
+              {m.name}
+            </option>
+          ))}
+        </select>
         <div className="flex gap-2">
           <Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
           <Input type="date" value={to} onChange={(e) => setTo(e.target.value)} />
@@ -264,6 +276,7 @@ function TransactionsPage() {
               <th className="px-4 py-2.5 font-medium">Type</th>
               <th className="px-4 py-2.5 font-medium">Category</th>
               <th className="px-4 py-2.5 font-medium">Source</th>
+              <th className="px-4 py-2.5 font-medium">User</th>
               <th className="px-4 py-2.5 font-medium">Remarks</th>
               <th className="px-4 py-2.5 text-right font-medium">Amount</th>
               <th className="px-4 py-2.5" />
@@ -279,6 +292,7 @@ function TransactionsPage() {
                   <span className="text-muted-foreground"> · {nameOf(t.subGroupId)}</span>
                 </td>
                 <td className="px-4 py-3">{nameOf(t.paymentSourceId)}</td>
+                <td className="whitespace-nowrap px-4 py-3">{memberName(t)}</td>
                 <td className="max-w-[16rem] truncate px-4 py-3 text-muted-foreground">{t.remarks}</td>
                 <td
                   className={`num px-4 py-3 text-right font-medium ${
@@ -311,7 +325,7 @@ function TransactionsPage() {
             ))}
             {filtered.length === 0 && (
               <tr>
-                <td colSpan={7} className="px-4 py-12 text-center text-muted-foreground">
+                <td colSpan={8} className="px-4 py-12 text-center text-muted-foreground">
                   No transactions match your filters.
                 </td>
               </tr>
@@ -390,6 +404,16 @@ function TransactionsPage() {
                 placeholder="0.00"
                 {...form.register("amount", { required: true })}
               />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="createdBy">Entry by</Label>
+              <select id="createdBy" className={selectClass} {...form.register("createdBy")}>
+                {memberOptions.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.name}
+                  </option>
+                ))}
+              </select>
             </div>
             <div className="space-y-1.5 sm:col-span-2">
               <Label htmlFor="remarks">Remarks</Label>
