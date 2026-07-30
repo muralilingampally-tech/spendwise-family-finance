@@ -39,7 +39,7 @@ export const Route = createFileRoute("/reports")({
 });
 
 type Preset = "month" | "lastMonth" | "year" | "lastYear" | "all" | "custom";
-type Dimension = "group" | "subGroup" | "source" | "month";
+type Dimension = "group" | "subGroup" | "source" | "month" | "user";
 
 const selectClass =
   "h-9 w-full rounded-md border border-input bg-background px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring";
@@ -73,12 +73,13 @@ const PRESETS: { key: Preset; label: string }[] = [
 ];
 
 function ReportsPage() {
-  const { transactions, masters } = useApp();
+  const { transactions, masters, members, user } = useApp();
   const [preset, setPreset] = useState<Preset>("month");
   const [custom, setCustom] = useState({ from: todayISO().slice(0, 8) + "01", to: todayISO() });
   const [type, setType] = useState<"all" | TransactionType>("all");
   const [dimension, setDimension] = useState<Dimension>("group");
   const [sourceFilter, setSourceFilter] = useState("");
+  const [userFilter, setUserFilter] = useState("");
 
   const range = preset === "custom" ? custom : rangeFor(preset);
 
@@ -90,6 +91,24 @@ function ReportsPage() {
     return (id: string | null) => (id ? (map.get(id) ?? "—") : "—");
   }, [masters]);
 
+  const memberName = useMemo(() => {
+    const map = new Map<string, string>();
+    members.forEach((m) => map.set(m.id, m.displayName || m.email || "Member"));
+    if (user) map.set(user.uid, user.displayName || user.email || "You");
+    return (t: (typeof transactions)[number]) =>
+      map.get(t.createdBy) || t.createdByName || "Unknown";
+  }, [members, user, transactions]);
+
+  const memberOptions = useMemo(() => {
+    const map = new Map<string, string>();
+    members.forEach((m) => map.set(m.id, m.displayName || m.email || "Member"));
+    transactions.forEach((t) => {
+      if (t.createdBy && !map.has(t.createdBy)) map.set(t.createdBy, t.createdByName || "Unknown");
+    });
+    if (user) map.set(user.uid, user.displayName || user.email || "You");
+    return [...map.entries()].map(([id, name]) => ({ id, name }));
+  }, [members, transactions, user]);
+
   const rows = useMemo(
     () =>
       transactions.filter((t) => {
@@ -97,9 +116,10 @@ function ReportsPage() {
         if (range.to && t.date > range.to) return false;
         if (type !== "all" && t.type !== type) return false;
         if (sourceFilter && t.paymentSourceId !== sourceFilter) return false;
+        if (userFilter && t.createdBy !== userFilter) return false;
         return true;
       }),
-    [transactions, range.from, range.to, type, sourceFilter],
+    [transactions, range.from, range.to, type, sourceFilter, userFilter],
   );
 
   const totals = useMemo(() => {
@@ -115,6 +135,7 @@ function ReportsPage() {
     if (dimension === "group") return nameOf(t.groupId);
     if (dimension === "subGroup") return `${nameOf(t.groupId)} › ${nameOf(t.subGroupId)}`;
     if (dimension === "source") return nameOf(t.paymentSourceId);
+    if (dimension === "user") return memberName(t);
     return monthKey(t.date);
   };
 
@@ -133,16 +154,17 @@ function ReportsPage() {
           .sort((a, b) => a.label.localeCompare(b.label))
           .map((r) => ({ ...r, label: monthLabel(r.label) }))
       : list.sort((a, b) => b.Income + b.Expense - (a.Income + a.Expense));
-  }, [rows, dimension, nameOf]);
+  }, [rows, dimension, nameOf, memberName]);
 
   const exportCsv = () => {
-    const head = ["Date", "Type", "Group", "Sub group", "Payment source", "Amount", "Remarks"];
+    const head = ["Date", "Type", "Group", "Sub group", "Payment source", "User", "Amount", "Remarks"];
     const body = rows.map((t) => [
       t.date,
       t.type,
       nameOf(t.groupId),
       nameOf(t.subGroupId),
       nameOf(t.paymentSourceId),
+      memberName(t),
       String(t.amount),
       t.remarks ?? "",
     ]);
@@ -232,6 +254,7 @@ function ReportsPage() {
               <option value="subGroup">Sub group</option>
               <option value="source">Payment source</option>
               <option value="month">Month</option>
+              <option value="user">User</option>
             </select>
           </div>
           <div className="space-y-1.5">
@@ -246,6 +269,22 @@ function ReportsPage() {
               {masters.paymentSources.map((s) => (
                 <option key={s.id} value={s.id}>
                   {s.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="userFilter">User</Label>
+            <select
+              id="userFilter"
+              className={selectClass}
+              value={userFilter}
+              onChange={(e) => setUserFilter(e.target.value)}
+            >
+              <option value="">All users</option>
+              {memberOptions.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.name}
                 </option>
               ))}
             </select>
@@ -297,7 +336,13 @@ function ReportsPage() {
             <thead className="bg-muted/60 text-left text-xs uppercase tracking-wide text-muted-foreground">
               <tr>
                 <th className="px-5 py-2.5 font-medium">
-                  {dimension === "month" ? "Month" : dimension === "source" ? "Source" : "Category"}
+                  {dimension === "month"
+                    ? "Month"
+                    : dimension === "source"
+                      ? "Source"
+                      : dimension === "user"
+                        ? "User"
+                        : "Category"}
                 </th>
                 <th className="px-5 py-2.5 text-right font-medium">Income</th>
                 <th className="px-5 py-2.5 text-right font-medium">Expense</th>

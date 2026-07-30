@@ -1,6 +1,6 @@
 import { getFirestoreDb, isFirebaseConfigured } from "./firebase";
 import { buildSeedRows } from "./seed";
-import type { MasterCollection, MasterItem, Transaction } from "./types";
+import type { MasterCollection, MasterItem, Member, Transaction } from "./types";
 
 export const MASTER_COLLECTIONS: MasterCollection[] = [
   "expenseGroups",
@@ -151,4 +151,15 @@ export async function ensureMembership(uid: string, familyId: string, profile: R
     { ...profile, familyId, updatedAt: now() },
     { merge: true },
   );
+  // Family-scoped member directory so both partners can see each other's names.
+  await mod.setDoc(
+    mod.doc(db, "families", familyId, "members", uid),
+    { ...profile, updatedAt: now() },
+    { merge: true },
+  );
+}
+
+export async function loadMembers(familyId: string): Promise<Member[]> {
+  const rows = (await repo.list(familyId, "members")) as unknown as Member[];
+  return rows.sort((a, b) => (a.displayName ?? a.email ?? "").localeCompare(b.displayName ?? b.email ?? ""));
 }
