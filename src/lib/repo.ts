@@ -142,3 +142,13 @@ export async function seedFamilyMasters(familyId: string) {
     });
   }
 }
+/** Registers the signed-in user as a member of the family (needed by Firestore rules). */
+export async function ensureMembership(uid: string, familyId: string, profile: Record<string, unknown>) {
+  if (!isFirebaseConfigured) return;
+  const { db, mod } = await getFirestoreDb();
+  await mod.setDoc(
+    mod.doc(db, "users", uid),
+    { ...profile, familyId, updatedAt: now() },
+    { merge: true },
+  );
+}
