@@ -37,6 +37,7 @@ interface AppState {
   ) => Promise<void>;
   deleteMaster: (collection: MasterCollection, id: string) => Promise<void>;
   saveTransaction: (values: Partial<Transaction>, id?: string) => Promise<void>;
+  bulkImportTransactions: (rows: Array<Partial<Transaction>>) => Promise<void>;
   deleteTransaction: (id: string) => Promise<void>;
 }
 
@@ -216,6 +217,25 @@ export const useApp = create<AppState>((set, get) => ({
         updatedAt: now(),
       });
     }
+    await get().refresh();
+  },
+
+  bulkImportTransactions: async (rows) => {
+    const user = get().user;
+    if (!user) return;
+
+    await Promise.all(
+      rows.map((values) =>
+        repo.create(user.familyId, "transactions", {
+          ...values,
+          createdBy: values.createdBy ?? user.uid,
+          createdByName:
+            values.createdByName ?? user.displayName ?? user.email ?? "Unknown",
+          createdAt: now(),
+          updatedAt: now(),
+        }),
+      ),
+    );
     await get().refresh();
   },
 

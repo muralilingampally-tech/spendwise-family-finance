@@ -1,8 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState, type ChangeEvent } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
-import { Pencil, Plus, Trash2 } from "lucide-react";
+import { Download, Pencil, Plus, Trash2, Upload } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -58,11 +58,71 @@ const emptyValues: FormValues = {
 const selectClass =
   "h-9 w-full rounded-md border border-input bg-background px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring";
 
+const normalizeHeader = (value: string) => value.trim().toLowerCase().replace(/[^a-z0-9]+/g, "");
+
+function parseCsvRecords(text: string): string[][] {
+  const records: string[][] = [];
+  let row: string[] = [];
+  let cell = "";
+  let inQuotes = false;
+
+  for (let i = 0; i < text.length; i += 1) {
+    const char = text[i];
+    if (char === '"') {
+      if (inQuotes && text[i + 1] === '"') {
+        cell += '"';
+        i += 1;
+      } else {
+        inQuotes = !inQuotes;
+      }
+      continue;
+    }
+
+    if (char === "," && !inQuotes) {
+      row.push(cell);
+      cell = "";
+      continue;
+    }
+
+    if ((char === "\n" || char === "\r") && !inQuotes) {
+      if (char === "\r" && text[i + 1] === "\n") i += 1;
+      row.push(cell);
+      if (row.some((value) => value.trim() !== "")) {
+        records.push(row);
+      }
+      row = [];
+      cell = "";
+      continue;
+    }
+
+    cell += char;
+  }
+
+  if (cell.length > 0 || row.length > 0) {
+    row.push(cell);
+    if (row.some((value) => value.trim() !== "")) {
+      records.push(row);
+    }
+  }
+
+  return records;
+}
+
 function TransactionsPage() {
-  const { transactions, masters, members, saveTransaction, deleteTransaction, user } = useApp();
+  const {
+    transactions,
+    masters,
+    members,
+    saveTransaction,
+    bulkImportTransactions,
+    deleteTransaction,
+    user,
+  } = useApp();
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Transaction | null>(null);
   const [busy, setBusy] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState<"all" | TransactionType>("all");
@@ -105,6 +165,26 @@ function TransactionsPage() {
     if (user) map.set(user.uid, user.displayName || user.email || "You");
     return [...map.entries()].map(([id, name]) => ({ id, name }));
   }, [members, transactions, user]);
+
+  const allGroupNames = useMemo(
+    () => [...masters.expenseGroups, ...masters.incomeGroups].map((g) => g.name),
+    [masters.expenseGroups, masters.incomeGroups],
+  );
+
+  const allSubGroupNames = useMemo(
+    () => masters.expenseSubGroups.concat(masters.incomeSubGroups).map((g) => g.name),
+    [masters.expenseSubGroups, masters.incomeSubGroups],
+  );
+
+  const allPaymentSourceNames = useMemo(
+    () => masters.paymentSources.map((s) => s.name),
+    [masters.paymentSources],
+  );
+
+  const allMemberNames = useMemo(
+    () => memberOptions.map((m) => m.name),
+    [memberOptions],
+  );
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -195,13 +275,179 @@ function TransactionsPage() {
 
   const canDelete = user?.role === "admin";
 
+  const exportTemplate = () => {
+    const helperLines = [
+      "# Groups: " + allGroupNames.join(" | "),
+      "# Sub groups: " + allSubGroupNames.join(" | "),
+      "# Payment sources: " + allPaymentSourceNames.join(" | "),
+      "# Entry by: " + allMemberNames.join(" | "),
+      "",
+    ];
+    const header = [
+      "Date",
+      "Type",
+      "Group",
+      "Sub group",
+      "Payment source",
+      "Amount",
+      "Remarks",
+      "Entry by",
+    ];
+    const exampleRows = [
+      [todayISO(), "expense", "Food", "Groceries", "Cash", "250", "Monthly grocery bill", user?.displayName || ""],
+      [todayISO(), "income", "Salary", "", "Bank", "12000", "Salary credit", user?.displayName || ""],
+    ];
+    const csv = [
+      ...helperLines,
+      header.join(","),
+      ...exampleRows.map((row) => row.map((value) => `"${String(value).replace(/"/g, '""')}"`).join(",")),
+    ].join("\n");
+
+    const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8;" }));
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `spendwise-transactions-template-${todayISO()}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const importCsv = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    try {
+      setImporting(true);
+      const text = await file.text();
+      const rows = parseCsvRecords(text).filter((record) => record.some((value) => value.trim() !== ""));
+      const dataRows = rows.filter((record) => !record[0].trim().startsWith("#"));
+      if (dataRows.length < 2) throw new Error("This CSV does not contain any transaction rows.");
+
+      const header = dataRows[0].map((value) => normalizeHeader(value));
+      const findColumn = (names: string[]) => {
+        const idx = header.findIndex((value) => names.some((name) => value === name));
+        if (idx === -1) throw new Error(`Missing required CSV column: ${names.join(" or ")}.`);
+        return idx;
+      };
+
+      const dateIndex = findColumn(["date"]);
+      const typeIndex = findColumn(["type"]);
+      const groupIndex = findColumn(["group", "groupname"]);
+      const subGroupIndex = findColumn(["subgroup", "subgroupname"]);
+      const paymentSourceIndex = findColumn(["paymentsource", "paymentsourcename"]);
+      const amountIndex = findColumn(["amount"]);
+      const remarksIndex = findColumn(["remarks"]);
+      const entryByIndex = header.findIndex((value) => value === "entryby");
+
+      const groupLookup = new Map<string, string>();
+      masters.expenseGroups.forEach((item) => {
+        groupLookup.set(`expense:${item.name.trim().toLowerCase()}`, item.id);
+      });
+      masters.incomeGroups.forEach((item) => {
+        groupLookup.set(`income:${item.name.trim().toLowerCase()}`, item.id);
+      });
+
+      const subGroupLookup = new Map<string, string>();
+      masters.expenseSubGroups.forEach((item) => {
+        subGroupLookup.set(`expense:${item.name.trim().toLowerCase()}`, item.id);
+      });
+      masters.incomeSubGroups.forEach((item) => {
+        subGroupLookup.set(`income:${item.name.trim().toLowerCase()}`, item.id);
+      });
+
+      const paymentSourceLookup = new Map<string, string>();
+      masters.paymentSources.forEach((item) => {
+        paymentSourceLookup.set(item.name.trim().toLowerCase(), item.id);
+      });
+
+      const memberLookup = new Map<string, string>();
+      memberOptions.forEach((member) => {
+        memberLookup.set(member.name.trim().toLowerCase(), member.id);
+      });
+
+      const records = dataRows.slice(1).map((record, index) => {
+        const row = index + 2;
+        const date = record[dateIndex]?.trim();
+        const type = record[typeIndex]?.trim().toLowerCase();
+        const groupName = record[groupIndex]?.trim();
+        const subGroupName = record[subGroupIndex]?.trim();
+        const paymentSourceName = record[paymentSourceIndex]?.trim();
+        const amount = Number(record[amountIndex]?.trim());
+        const remarks = record[remarksIndex]?.trim() ?? "";
+        const entryByName = entryByIndex >= 0 ? record[entryByIndex]?.trim() ?? "" : "";
+
+        if (!date || !/\d{4}-\d{2}-\d{2}/.test(date)) {
+          throw new Error(`Row ${row}: date must be in yyyy-mm-dd format.`);
+        }
+        if (type !== "income" && type !== "expense") {
+          throw new Error(`Row ${row}: type must be income or expense.`);
+        }
+        if (!Number.isFinite(amount) || amount <= 0) {
+          throw new Error(`Row ${row}: amount must be greater than zero.`);
+        }
+
+        const groupId = groupLookup.get(`${type}:${groupName.trim().toLowerCase()}`);
+        if (!groupId) {
+          throw new Error(`Row ${row}: group "${groupName}" was not found in your configured ${type} masters.`);
+        }
+
+        const paymentSourceId = paymentSourceLookup.get(paymentSourceName.trim().toLowerCase());
+        if (!paymentSourceId) {
+          throw new Error(`Row ${row}: payment source "${paymentSourceName}" was not found in your configured masters.`);
+        }
+
+        const subGroupId = subGroupName
+          ? subGroupLookup.get(`${type}:${subGroupName.trim().toLowerCase()}`) ?? null
+          : null;
+
+        const createdBy = entryByName
+          ? memberLookup.get(entryByName.trim().toLowerCase()) ?? user?.uid ?? ""
+          : user?.uid ?? "";
+
+        return {
+          date,
+          type,
+          groupId,
+          subGroupId,
+          paymentSourceId,
+          amount,
+          remarks,
+          createdBy,
+          createdByName: entryByName || user?.displayName || user?.email || "Unknown",
+        } satisfies Partial<Transaction>;
+      });
+
+      await bulkImportTransactions(records);
+      toast.success(`Imported ${records.length} transaction${records.length === 1 ? "" : "s"}`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not import CSV file");
+    } finally {
+      setImporting(false);
+      if (event.target) event.target.value = "";
+    }
+  };
+
   return (
     <AppShell
       title="Transactions"
       actions={
-        <Button size="sm" onClick={openNew}>
-          <Plus className="mr-1 h-4 w-4" /> New
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button size="sm" variant="outline" onClick={exportTemplate}>
+            <Download className="mr-1 h-4 w-4" /> Export CSV template
+          </Button>
+          <Button size="sm" variant="outline" onClick={() => fileInputRef.current?.click()} disabled={importing}>
+            <Upload className="mr-1 h-4 w-4" /> {importing ? "Importing…" : "Import CSV"}
+          </Button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".csv,text/csv"
+            className="hidden"
+            onChange={importCsv}
+          />
+          <Button size="sm" onClick={openNew}>
+            <Plus className="mr-1 h-4 w-4" /> New
+          </Button>
+        </div>
       }
     >
       <div className="card-surface grid gap-3 p-4 md:grid-cols-3 lg:grid-cols-6">
