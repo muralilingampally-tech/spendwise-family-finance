@@ -29,7 +29,7 @@ export function AppShell({ title, actions, children }: {
   children: ReactNode;
 }) {
   const navigate = useNavigate();
-  const { ready, user, init, signOut } = useApp();
+  const { ready, user, init, signOut, dataError } = useApp();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const [open, setOpen] = useState(false);
 
@@ -124,6 +124,11 @@ export function AppShell({ title, actions, children }: {
           <div className="border-b border-border bg-accent px-4 py-2 text-xs text-accent-foreground md:px-8">
             Demo mode — Firebase env vars are not set, data is stored in this browser. Add your
             Firebase config in <code>.env</code> to switch to Firestore.
+          </div>
+        )}
+        {dataError && (
+          <div className="border-b border-destructive/30 bg-destructive/10 px-4 py-2 text-xs text-destructive md:px-8">
+            {dataError}
           </div>
         )}
         <main className="px-4 py-6 md:px-8">{children}</main>
