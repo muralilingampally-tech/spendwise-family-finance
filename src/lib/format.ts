@@ -18,4 +18,13 @@ export const monthLabel = (key: string) => {
   return d.toLocaleDateString("en-IN", { month: "short", year: "2-digit" });
 };
 
-export const todayISO = () => new Date().toISOString().slice(0, 10);
+const pad = (value: number) => String(value).padStart(2, "0");
+
+export const toLocalISODate = (date: Date) => {
+  const year = date.getFullYear();
+  const month = pad(date.getMonth() + 1);
+  const day = pad(date.getDate());
+  return `${year}-${month}-${day}`;
+};
+
+export const todayISO = () => toLocalISODate(new Date());

@@ -16,7 +16,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useApp } from "@/lib/store";
-import { inr, monthKey, monthLabel, todayISO } from "@/lib/format";
+import { inr, monthKey, monthLabel, todayISO, toLocalISODate } from "@/lib/format";
 import type { TransactionType } from "@/lib/types";
 
 export const Route = createFileRoute("/reports")({
@@ -48,12 +48,11 @@ function rangeFor(preset: Preset): { from: string; to: string } {
   const now = new Date();
   const y = now.getFullYear();
   const m = now.getMonth();
-  const iso = (d: Date) => d.toISOString().slice(0, 10);
   switch (preset) {
     case "month":
-      return { from: iso(new Date(y, m, 1)), to: iso(new Date(y, m + 1, 0)) };
+      return { from: toLocalISODate(new Date(y, m, 1)), to: toLocalISODate(new Date(y, m + 1, 0)) };
     case "lastMonth":
-      return { from: iso(new Date(y, m - 1, 1)), to: iso(new Date(y, m, 0)) };
+      return { from: toLocalISODate(new Date(y, m - 1, 1)), to: toLocalISODate(new Date(y, m, 0)) };
     case "year":
       return { from: `${y}-01-01`, to: `${y}-12-31` };
     case "lastYear":
