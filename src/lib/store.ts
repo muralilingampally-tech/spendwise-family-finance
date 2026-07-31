@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import { getFirebaseAuth, isEmailAllowed, isFirebaseConfigured, sharedFamilyId } from "./firebase";
-import { ensureMembership, loadMasters, loadMembers, loadTransactions, repo, seedFamilyMasters } from "./repo";
-import type { AppUser, MasterCollection, MasterItem, Member, Transaction } from "./types";
+import { ensureMembership, loadBudgets, loadMasters, loadMembers, loadTransactions, repo, seedFamilyMasters } from "./repo";
+import type { AppUser, Budget, MasterCollection, MasterItem, Member, Transaction } from "./types";
 
 const emptyMasters = {
   expenseGroups: [],
@@ -23,6 +23,7 @@ interface AppState {
   masters: Record<MasterCollection, MasterItem[]>;
   transactions: Transaction[];
   members: Member[];
+  budgets: Budget[];
   init: () => void;
   signInWithGoogle: () => Promise<void>;
   signInWithEmail: (email: string, password: string) => Promise<void>;
@@ -39,6 +40,8 @@ interface AppState {
   saveTransaction: (values: Partial<Transaction>, id?: string) => Promise<void>;
   bulkImportTransactions: (rows: Array<Partial<Transaction>>) => Promise<void>;
   deleteTransaction: (id: string) => Promise<void>;
+  saveBudget: (values: Partial<Budget> & { period: string; groupId: string }) => Promise<void>;
+  deleteBudget: (id: string) => Promise<void>;
 }
 
 let initialised = false;
@@ -52,6 +55,7 @@ export const useApp = create<AppState>((set, get) => ({
   masters: emptyMasters,
   transactions: [],
   members: [],
+  budgets: [],
 
   init: () => {
     if (initialised || typeof window === "undefined") return;
@@ -78,7 +82,7 @@ export const useApp = create<AppState>((set, get) => ({
           console.error("Loading family data failed", error);
         }
       } else {
-        set({ masters: emptyMasters, transactions: [], members: [] });
+        set({ masters: emptyMasters, transactions: [], members: [], budgets: [] });
       }
       set({ ready: true });
     };
@@ -153,7 +157,7 @@ export const useApp = create<AppState>((set, get) => ({
   signOut: async () => {
     if (!isFirebaseConfigured) {
       window.localStorage.removeItem(LOCAL_USER_KEY);
-      set({ user: null, masters: emptyMasters, transactions: [], members: [] });
+      set({ user: null, masters: emptyMasters, transactions: [], members: [], budgets: [] });
       return;
     }
     const { auth, mod } = await getFirebaseAuth();
@@ -165,12 +169,13 @@ export const useApp = create<AppState>((set, get) => ({
     if (!user) return;
     set({ loading: true });
     try {
-      const [masters, transactions, members] = await Promise.all([
+      const [masters, transactions, members, budgets] = await Promise.all([
         loadMasters(user.familyId),
         loadTransactions(user.familyId),
         loadMembers(user.familyId).catch(() => [] as Member[]),
+        loadBudgets(user.familyId).catch(() => [] as Budget[]),
       ]);
-      set({ masters, transactions, members });
+      set({ masters, transactions, members, budgets });
     } finally {
       set({ loading: false });
     }
@@ -243,6 +248,39 @@ export const useApp = create<AppState>((set, get) => ({
     const user = get().user;
     if (!user) return;
     await repo.remove(user.familyId, "transactions", id);
+    await get().refresh();
+  },
+
+  saveBudget: async ({ period, groupId, amount = 0, type = "expense", notes = null }) => {
+    const user = get().user;
+    if (!user) return;
+    const existing = get().budgets.find(
+      (b) => b.period === period && b.groupId === groupId,
+    );
+    if (existing) {
+      await repo.update(user.familyId, "budgets", existing.id, {
+        amount: Number(amount) || 0,
+        notes,
+        updatedAt: now(),
+      });
+    } else {
+      await repo.create(user.familyId, "budgets", {
+        period,
+        groupId,
+        type,
+        amount: Number(amount) || 0,
+        notes,
+        createdAt: now(),
+        updatedAt: now(),
+      });
+    }
+    await get().refresh();
+  },
+
+  deleteBudget: async (id) => {
+    const user = get().user;
+    if (!user) return;
+    await repo.remove(user.familyId, "budgets", id);
     await get().refresh();
   },
 }));

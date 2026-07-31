@@ -1,16 +1,21 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { Fragment, useMemo, useState } from "react";
 import {
   Bar,
   BarChart,
   CartesianGrid,
+  Cell,
   Legend,
+  Line,
+  LineChart,
+  Pie,
+  PieChart,
   ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
 } from "recharts";
-import { Download } from "lucide-react";
+import { ChevronRight, Download } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -40,6 +45,15 @@ export const Route = createFileRoute("/reports")({
 
 type Preset = "month" | "lastMonth" | "year" | "lastYear" | "all" | "custom";
 type Dimension = "group" | "subGroup" | "source" | "month" | "user";
+
+const PIE_COLORS = [
+  "var(--chart-1)",
+  "var(--chart-2)",
+  "var(--chart-3)",
+  "var(--chart-4)",
+  "var(--chart-5)",
+  "var(--primary)",
+];
 
 const selectClass =
   "h-9 w-full rounded-md border border-input bg-background px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring";
@@ -79,6 +93,7 @@ function ReportsPage() {
   const [dimension, setDimension] = useState<Dimension>("group");
   const [sourceFilter, setSourceFilter] = useState("");
   const [userFilter, setUserFilter] = useState("");
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
 
   const range = preset === "custom" ? custom : rangeFor(preset);
 
@@ -154,6 +169,72 @@ function ReportsPage() {
           .map((r) => ({ ...r, label: monthLabel(r.label) }))
       : list.sort((a, b) => b.Income + b.Expense - (a.Income + a.Expense));
   }, [rows, dimension, nameOf, memberName]);
+
+  /** Group → sub group tree for the selected range. */
+  const groupTree = useMemo(() => {
+    const map = new Map<
+      string,
+      {
+        id: string;
+        label: string;
+        income: number;
+        expense: number;
+        count: number;
+        subs: Map<string, { label: string; income: number; expense: number; count: number }>;
+      }
+    >();
+    rows.forEach((t) => {
+      const gid = t.groupId || "none";
+      const group =
+        map.get(gid) ??
+        { id: gid, label: nameOf(t.groupId), income: 0, expense: 0, count: 0, subs: new Map() };
+      const sid = t.subGroupId || "none";
+      const sub = group.subs.get(sid) ?? { label: nameOf(t.subGroupId), income: 0, expense: 0, count: 0 };
+      const amount = Number(t.amount);
+      if (t.type === "income") {
+        group.income += amount;
+        sub.income += amount;
+      } else {
+        group.expense += amount;
+        sub.expense += amount;
+      }
+      group.count += 1;
+      sub.count += 1;
+      group.subs.set(sid, sub);
+      map.set(gid, group);
+    });
+    return [...map.values()]
+      .map((g) => ({
+        ...g,
+        subRows: [...g.subs.values()].sort(
+          (a, b) => b.income + b.expense - (a.income + a.expense),
+        ),
+      }))
+      .sort((a, b) => b.income + b.expense - (a.income + a.expense));
+  }, [rows, nameOf]);
+
+  const shareData = useMemo(
+    () =>
+      groupTree
+        .filter((g) => g.expense > 0)
+        .slice(0, 6)
+        .map((g) => ({ name: g.label, value: g.expense })),
+    [groupTree],
+  );
+
+  const trend = useMemo(() => {
+    const map = new Map<string, { key: string; Income: number; Expense: number }>();
+    rows.forEach((t) => {
+      const k = monthKey(t.date);
+      const row = map.get(k) ?? { key: k, Income: 0, Expense: 0 };
+      if (t.type === "income") row.Income += Number(t.amount);
+      else row.Expense += Number(t.amount);
+      map.set(k, row);
+    });
+    return [...map.values()]
+      .sort((a, b) => a.key.localeCompare(b.key))
+      .map((r) => ({ ...r, label: monthLabel(r.key), Net: r.Income - r.Expense }));
+  }, [rows]);
 
   const exportCsv = () => {
     const head = ["Date", "Type", "Group", "Sub group", "Payment source", "User", "Amount", "Remarks"];
@@ -325,6 +406,154 @@ function ReportsPage() {
               </BarChart>
             </ResponsiveContainer>
           )}
+        </div>
+      </section>
+
+      <div className="mt-4 grid gap-4 lg:grid-cols-2">
+        <section className="card-surface p-5">
+          <h2 className="text-sm font-semibold">Expense share by group</h2>
+          <div className="mt-2 h-72">
+            {shareData.length === 0 ? (
+              <div className="grid h-full place-items-center text-sm text-muted-foreground">
+                No expenses in this range.
+              </div>
+            ) : (
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={shareData}
+                    dataKey="value"
+                    nameKey="name"
+                    innerRadius={55}
+                    outerRadius={90}
+                    paddingAngle={2}
+                  >
+                    {shareData.map((_, i) => (
+                      <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip
+                    formatter={(v: number) => inr(v)}
+                    contentStyle={{
+                      background: "var(--popover)",
+                      border: "1px solid var(--border)",
+                      borderRadius: 12,
+                    }}
+                  />
+                  <Legend />
+                </PieChart>
+              </ResponsiveContainer>
+            )}
+          </div>
+        </section>
+
+        <section className="card-surface p-5">
+          <h2 className="text-sm font-semibold">Monthly trend</h2>
+          <div className="mt-2 h-72">
+            {trend.length === 0 ? (
+              <div className="grid h-full place-items-center text-sm text-muted-foreground">
+                Nothing to plot yet.
+              </div>
+            ) : (
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={trend}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
+                  <XAxis dataKey="label" tickLine={false} axisLine={false} fontSize={11} />
+                  <YAxis tickLine={false} axisLine={false} fontSize={11} width={70} />
+                  <Tooltip
+                    formatter={(v: number) => inr(v)}
+                    contentStyle={{
+                      background: "var(--popover)",
+                      border: "1px solid var(--border)",
+                      borderRadius: 12,
+                    }}
+                  />
+                  <Legend />
+                  <Line type="monotone" dataKey="Income" stroke="var(--chart-3)" strokeWidth={2} dot={false} />
+                  <Line type="monotone" dataKey="Expense" stroke="var(--chart-2)" strokeWidth={2} dot={false} />
+                  <Line type="monotone" dataKey="Net" stroke="var(--chart-4)" strokeWidth={2} strokeDasharray="4 4" dot={false} />
+                </LineChart>
+              </ResponsiveContainer>
+            )}
+          </div>
+        </section>
+      </div>
+
+      <section className="card-surface mt-4 overflow-hidden">
+        <div className="px-5 py-4 text-sm font-semibold">
+          Group-wise report ({range.from || "start"} → {range.to || "today"})
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="bg-muted/60 text-left text-xs uppercase tracking-wide text-muted-foreground">
+              <tr>
+                <th className="px-5 py-2.5 font-medium">Group / sub group</th>
+                <th className="px-3 py-2.5 text-right font-medium">Entries</th>
+                <th className="px-3 py-2.5 text-right font-medium">Income</th>
+                <th className="px-3 py-2.5 text-right font-medium">Expense</th>
+                <th className="px-3 py-2.5 text-right font-medium">Net</th>
+                <th className="px-5 py-2.5 text-right font-medium">% of expense</th>
+              </tr>
+            </thead>
+            <tbody>
+              {groupTree.map((g) => (
+                <Fragment key={g.id}>
+                  <tr className="border-t border-border">
+                    <td className="px-5 py-3">
+                      <button
+                        className="flex items-center gap-1.5 font-medium"
+                        onClick={() => setExpanded((e) => ({ ...e, [g.id]: !e[g.id] }))}
+                      >
+                        <ChevronRight
+                          className={`h-4 w-4 transition-transform ${expanded[g.id] ? "rotate-90" : ""}`}
+                        />
+                        {g.label}
+                      </button>
+                    </td>
+                    <td className="num px-3 py-3 text-right text-muted-foreground">{g.count}</td>
+                    <td className="num px-3 py-3 text-right text-success">{inr(g.income)}</td>
+                    <td className="num px-3 py-3 text-right text-destructive">{inr(g.expense)}</td>
+                    <td className="num px-3 py-3 text-right font-medium">{inr(g.income - g.expense)}</td>
+                    <td className="num px-5 py-3 text-right text-muted-foreground">
+                      {totals.expense > 0 ? `${((g.expense / totals.expense) * 100).toFixed(1)}%` : "—"}
+                    </td>
+                  </tr>
+                  {expanded[g.id] &&
+                    g.subRows.map((s) => (
+                      <tr key={`${g.id}-${s.label}`} className="border-t border-border/60 bg-muted/20">
+                        <td className="px-5 py-2.5 pl-12 text-muted-foreground">{s.label}</td>
+                        <td className="num px-3 py-2.5 text-right text-muted-foreground">{s.count}</td>
+                        <td className="num px-3 py-2.5 text-right">{inr(s.income)}</td>
+                        <td className="num px-3 py-2.5 text-right">{inr(s.expense)}</td>
+                        <td className="num px-3 py-2.5 text-right">{inr(s.income - s.expense)}</td>
+                        <td className="num px-5 py-2.5 text-right text-muted-foreground">
+                          {totals.expense > 0 ? `${((s.expense / totals.expense) * 100).toFixed(1)}%` : "—"}
+                        </td>
+                      </tr>
+                    ))}
+                </Fragment>
+              ))}
+              {groupTree.length === 0 && (
+                <tr>
+                  <td colSpan={6} className="px-5 py-10 text-center text-muted-foreground">
+                    No entries for the selected period.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+            {groupTree.length > 0 && (
+              <tfoot>
+                <tr className="border-t border-border bg-muted/40 font-semibold">
+                  <td className="px-5 py-3">Total</td>
+                  <td className="num px-3 py-3 text-right">{totals.count}</td>
+                  <td className="num px-3 py-3 text-right">{inr(totals.income)}</td>
+                  <td className="num px-3 py-3 text-right">{inr(totals.expense)}</td>
+                  <td className="num px-3 py-3 text-right">{inr(totals.balance)}</td>
+                  <td className="num px-5 py-3 text-right">100%</td>
+                </tr>
+              </tfoot>
+            )}
+          </table>
         </div>
       </section>
 
