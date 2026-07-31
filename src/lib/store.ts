@@ -2,6 +2,7 @@ import { create } from "zustand";
 import { getFirebaseAuth, isEmailAllowed, isFirebaseConfigured, sharedFamilyId } from "./firebase";
 import { ensureMembership, loadBudgets, loadMasters, loadMembers, loadTransactions, repo, seedFamilyMasters } from "./repo";
 import type { AppUser, Budget, MasterCollection, MasterItem, Member, Transaction } from "./types";
+import { normalizeDate } from "./format";
 
 const emptyMasters = {
   expenseGroups: [],
@@ -13,6 +14,14 @@ const emptyMasters = {
 
 const LOCAL_USER_KEY = "spendwise:local-user";
 const now = () => new Date().toISOString();
+
+/** Every transaction is stored with a single canonical yyyy-MM-dd date. */
+function withCanonicalDate<T extends Partial<Transaction>>(values: T): T {
+  if (values.date == null) return values;
+  const date = normalizeDate(values.date);
+  if (!date) throw new Error(`Unrecognised date "${String(values.date)}".`);
+  return { ...values, date };
+}
 
 interface AppState {
   ready: boolean;
@@ -210,6 +219,7 @@ export const useApp = create<AppState>((set, get) => ({
   saveTransaction: async (values, id) => {
     const user = get().user;
     if (!user) return;
+    values = withCanonicalDate(values);
     if (id) {
       await repo.update(user.familyId, "transactions", id, { ...values, updatedAt: now() });
     } else {
@@ -230,7 +240,7 @@ export const useApp = create<AppState>((set, get) => ({
     if (!user) return;
 
     await Promise.all(
-      rows.map((values) =>
+      rows.map(withCanonicalDate).map((values) =>
         repo.create(user.familyId, "transactions", {
           ...values,
           createdBy: values.createdBy ?? user.uid,

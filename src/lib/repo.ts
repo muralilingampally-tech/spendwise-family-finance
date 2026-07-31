@@ -1,4 +1,5 @@
 import { getFirestoreDb, isFirebaseConfigured } from "./firebase";
+import { normalizeDate } from "./format";
 import { buildSeedRows } from "./seed";
 import type { Budget, MasterCollection, MasterItem, Member, Transaction } from "./types";
 
@@ -106,7 +107,11 @@ export async function loadMasters(familyId: string) {
 
 export async function loadTransactions(familyId: string) {
   const rows = (await repo.list(familyId, "transactions")) as unknown as Transaction[];
-  return rows.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
+  // Older rows may carry a non-canonical date; normalise on read so filters,
+  // sorting and reports all work on a single yyyy-MM-dd format.
+  return rows
+    .map((t) => ({ ...t, date: normalizeDate(t.date) ?? t.date }))
+    .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
 }
 
 /** Seeds master data the first time a family is created. */

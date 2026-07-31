@@ -15,7 +15,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useApp } from "@/lib/store";
-import { inr, shortDate, todayISO } from "@/lib/format";
+import { inr, normalizeDate, shortDate, todayISO } from "@/lib/format";
 import type { Transaction, TransactionType } from "@/lib/types";
 
 export const Route = createFileRoute("/transactions")({
@@ -281,6 +281,7 @@ function TransactionsPage() {
       "# Sub groups: " + allSubGroupNames.join(" | "),
       "# Payment sources: " + allPaymentSourceNames.join(" | "),
       "# Entry by: " + allMemberNames.join(" | "),
+      "# Date: yyyy-mm-dd preferred; dd/mm/yyyy, dd-mm-yyyy and 31 Jul 2026 also work.",
       "",
     ];
     const header = [
@@ -366,7 +367,7 @@ function TransactionsPage() {
 
       const records = dataRows.slice(1).map((record, index) => {
         const row = index + 2;
-        const date = record[dateIndex]?.trim();
+        const rawDate = record[dateIndex]?.trim();
         const type = record[typeIndex]?.trim().toLowerCase();
         const groupName = record[groupIndex]?.trim();
         const subGroupName = record[subGroupIndex]?.trim();
@@ -375,8 +376,11 @@ function TransactionsPage() {
         const remarks = record[remarksIndex]?.trim() ?? "";
         const entryByName = entryByIndex >= 0 ? record[entryByIndex]?.trim() ?? "" : "";
 
-        if (!date || !/\d{4}-\d{2}-\d{2}/.test(date)) {
-          throw new Error(`Row ${row}: date must be in yyyy-mm-dd format.`);
+        const date = normalizeDate(rawDate);
+        if (!date) {
+          throw new Error(
+            `Row ${row}: could not read the date "${rawDate ?? ""}". Use yyyy-mm-dd, dd/mm/yyyy or 31 Jul 2026.`,
+          );
         }
         if (type !== "income" && type !== "expense") {
           throw new Error(`Row ${row}: type must be income or expense.`);
