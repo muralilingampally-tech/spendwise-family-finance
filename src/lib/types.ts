@@ -53,6 +53,19 @@ export interface Member {
   role?: Role;
 }
 
+/** A monthly budget preset for one group (expense or income). */
+export interface Budget {
+  id: string;
+  /** yyyy-MM */
+  period: string;
+  type: TransactionType;
+  groupId: string;
+  amount: number;
+  notes?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export const MASTER_LABELS: Record<MasterCollection, { title: string; singular: string }> = {
   expenseGroups: { title: "Expense Groups", singular: "Expense Group" },
   expenseSubGroups: { title: "Expense Sub Groups", singular: "Expense Sub Group" },

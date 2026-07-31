@@ -1,6 +1,6 @@
 import { getFirestoreDb, isFirebaseConfigured } from "./firebase";
 import { buildSeedRows } from "./seed";
-import type { MasterCollection, MasterItem, Member, Transaction } from "./types";
+import type { Budget, MasterCollection, MasterItem, Member, Transaction } from "./types";
 
 export const MASTER_COLLECTIONS: MasterCollection[] = [
   "expenseGroups",
@@ -162,4 +162,9 @@ export async function ensureMembership(uid: string, familyId: string, profile: R
 export async function loadMembers(familyId: string): Promise<Member[]> {
   const rows = (await repo.list(familyId, "members")) as unknown as Member[];
   return rows.sort((a, b) => (a.displayName ?? a.email ?? "").localeCompare(b.displayName ?? b.email ?? ""));
+}
+
+export async function loadBudgets(familyId: string): Promise<Budget[]> {
+  const rows = (await repo.list(familyId, "budgets")) as unknown as Budget[];
+  return rows.sort((a, b) => (a.period < b.period ? 1 : a.period > b.period ? -1 : 0));
 }
