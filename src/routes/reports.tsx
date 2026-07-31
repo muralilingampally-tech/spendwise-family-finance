@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { Fragment, useMemo, useState } from "react";
 import {
   Bar,
   BarChart,
@@ -497,8 +497,8 @@ function ReportsPage() {
             </thead>
             <tbody>
               {groupTree.map((g) => (
-                <>
-                  <tr key={g.id} className="border-t border-border">
+                <Fragment key={g.id}>
+                  <tr className="border-t border-border">
                     <td className="px-5 py-3">
                       <button
                         className="flex items-center gap-1.5 font-medium"
@@ -531,7 +531,7 @@ function ReportsPage() {
                         </td>
                       </tr>
                     ))}
-                </>
+                </Fragment>
               ))}
               {groupTree.length === 0 && (
                 <tr>
