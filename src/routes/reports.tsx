@@ -22,6 +22,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useApp } from "@/lib/store";
 import { inr, monthKey, monthLabel, todayISO, toLocalISODate } from "@/lib/format";
+import { signedInvestment } from "@/lib/investment";
 import type { TransactionType } from "@/lib/types";
 
 export const Route = createFileRoute("/reports")({
@@ -139,14 +140,27 @@ function ReportsPage() {
   const totals = useMemo(() => {
     let income = 0;
     let expense = 0;
-    let investment = 0;
+    let invested = 0;
+    let realized = 0;
     rows.forEach((t) => {
       if (t.type === "income") income += Number(t.amount);
-      else if (t.type === "investment") investment += Number(t.amount);
+      else if (t.type === "investment") {
+        const signed = signedInvestment(nameOf(t.subGroupId), Number(t.amount));
+        if (signed >= 0) realized += signed;
+        else invested += -signed;
+      }
       else expense += Number(t.amount);
     });
-    return { income, expense, investment, balance: income - expense, count: rows.length };
-  }, [rows]);
+    return {
+      income,
+      expense,
+      invested,
+      realized,
+      investment: realized - invested,
+      balance: income - expense,
+      count: rows.length,
+    };
+  }, [rows, nameOf]);
 
   const keyFor = (t: (typeof rows)[number]) => {
     if (dimension === "group") return nameOf(t.groupId);
@@ -166,7 +180,8 @@ function ReportsPage() {
       const k = keyFor(t);
       const row = map.get(k) ?? { label: k, Income: 0, Expense: 0, Investment: 0 };
       if (t.type === "income") row.Income += Number(t.amount);
-      else if (t.type === "investment") row.Investment += Number(t.amount);
+      else if (t.type === "investment")
+        row.Investment += signedInvestment(nameOf(t.subGroupId), Number(t.amount));
       else row.Expense += Number(t.amount);
       map.set(k, row);
     });
@@ -209,8 +224,9 @@ function ReportsPage() {
         group.income += amount;
         sub.income += amount;
       } else if (t.type === "investment") {
-        group.investment += amount;
-        sub.investment += amount;
+        const signed = signedInvestment(nameOf(t.subGroupId), amount);
+        group.investment += signed;
+        sub.investment += signed;
       } else {
         group.expense += amount;
         sub.expense += amount;
@@ -240,19 +256,20 @@ function ReportsPage() {
   );
 
   const trend = useMemo(() => {
-    const map = new Map<string, { key: string; Income: number; Expense: number }>();
+    const map = new Map<string, { key: string; Income: number; Expense: number; Investment: number }>();
     rows.forEach((t) => {
-      if (t.type === "investment") return;
       const k = monthKey(t.date);
-      const row = map.get(k) ?? { key: k, Income: 0, Expense: 0 };
-      if (t.type === "income") row.Income += Number(t.amount);
+      const row = map.get(k) ?? { key: k, Income: 0, Expense: 0, Investment: 0 };
+      if (t.type === "investment")
+        row.Investment += signedInvestment(nameOf(t.subGroupId), Number(t.amount));
+      else if (t.type === "income") row.Income += Number(t.amount);
       else row.Expense += Number(t.amount);
       map.set(k, row);
     });
     return [...map.values()]
       .sort((a, b) => a.key.localeCompare(b.key))
       .map((r) => ({ ...r, label: monthLabel(r.key), Net: r.Income - r.Expense }));
-  }, [rows]);
+  }, [rows, nameOf]);
 
   const exportCsv = () => {
     const head = [
@@ -406,10 +423,16 @@ function ReportsPage() {
         </div>
       </section>
 
-      <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+      <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
         <Stat label="Income" value={inr(totals.income)} tone="text-success" />
         <Stat label="Expense" value={inr(totals.expense)} tone="text-destructive" />
-        <Stat label="Investments" value={inr(totals.investment)} tone="text-primary" />
+        <Stat label="Invested" value={inr(totals.invested)} tone="text-destructive" />
+        <Stat label="Realized" value={inr(totals.realized)} tone="text-success" />
+        <Stat
+          label="Investment net"
+          value={inr(totals.investment)}
+          tone={totals.investment < 0 ? "text-destructive" : "text-success"}
+        />
         <Stat label="Balance" value={inr(totals.balance)} tone="text-primary" />
         <Stat label="Entries" value={String(totals.count)} tone="" />
       </div>
@@ -438,6 +461,7 @@ function ReportsPage() {
                 <Legend />
                 <Bar dataKey="Income" fill="var(--chart-3)" radius={[6, 6, 0, 0]} />
                 <Bar dataKey="Expense" fill="var(--chart-2)" radius={[6, 6, 0, 0]} />
+                <Bar dataKey="Investment" fill="var(--chart-1)" radius={[6, 6, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           )}
@@ -506,6 +530,7 @@ function ReportsPage() {
                   <Legend />
                   <Line type="monotone" dataKey="Income" stroke="var(--chart-3)" strokeWidth={2} dot={false} />
                   <Line type="monotone" dataKey="Expense" stroke="var(--chart-2)" strokeWidth={2} dot={false} />
+                  <Line type="monotone" dataKey="Investment" stroke="var(--chart-1)" strokeWidth={2} dot={false} />
                   <Line type="monotone" dataKey="Net" stroke="var(--chart-4)" strokeWidth={2} strokeDasharray="4 4" dot={false} />
                 </LineChart>
               </ResponsiveContainer>
@@ -526,7 +551,7 @@ function ReportsPage() {
                 <th className="px-3 py-2.5 text-right font-medium">Entries</th>
                 <th className="px-3 py-2.5 text-right font-medium">Income</th>
                 <th className="px-3 py-2.5 text-right font-medium">Expense</th>
-                <th className="px-3 py-2.5 text-right font-medium">Invested</th>
+                <th className="px-3 py-2.5 text-right font-medium">Investment net</th>
                 <th className="px-3 py-2.5 text-right font-medium">Net</th>
                 <th className="px-5 py-2.5 text-right font-medium">% of expense</th>
               </tr>
@@ -549,7 +574,9 @@ function ReportsPage() {
                     <td className="num px-3 py-3 text-right text-muted-foreground">{g.count}</td>
                     <td className="num px-3 py-3 text-right text-success">{inr(g.income)}</td>
                     <td className="num px-3 py-3 text-right text-destructive">{inr(g.expense)}</td>
-                    <td className="num px-3 py-3 text-right">{inr(g.investment)}</td>
+                    <td className={`num px-3 py-3 text-right ${g.investment < 0 ? "text-destructive" : g.investment > 0 ? "text-success" : ""}`}>
+                      {inr(g.investment)}
+                    </td>
                     <td className="num px-3 py-3 text-right font-medium">{inr(g.income - g.expense)}</td>
                     <td className="num px-5 py-3 text-right text-muted-foreground">
                       {totals.expense > 0 ? `${((g.expense / totals.expense) * 100).toFixed(1)}%` : "—"}
@@ -562,7 +589,9 @@ function ReportsPage() {
                         <td className="num px-3 py-2.5 text-right text-muted-foreground">{s.count}</td>
                         <td className="num px-3 py-2.5 text-right">{inr(s.income)}</td>
                         <td className="num px-3 py-2.5 text-right">{inr(s.expense)}</td>
-                        <td className="num px-3 py-2.5 text-right">{inr(s.investment)}</td>
+                        <td className={`num px-3 py-2.5 text-right ${s.investment < 0 ? "text-destructive" : s.investment > 0 ? "text-success" : ""}`}>
+                          {inr(s.investment)}
+                        </td>
                         <td className="num px-3 py-2.5 text-right">{inr(s.income - s.expense)}</td>
                         <td className="num px-5 py-2.5 text-right text-muted-foreground">
                           {totals.expense > 0 ? `${((s.expense / totals.expense) * 100).toFixed(1)}%` : "—"}
@@ -615,7 +644,7 @@ function ReportsPage() {
                 </th>
                 <th className="px-5 py-2.5 text-right font-medium">Income</th>
                 <th className="px-5 py-2.5 text-right font-medium">Expense</th>
-                <th className="px-5 py-2.5 text-right font-medium">Invested</th>
+                <th className="px-5 py-2.5 text-right font-medium">Investment net</th>
                 <th className="px-5 py-2.5 text-right font-medium">Net</th>
               </tr>
             </thead>
@@ -625,7 +654,9 @@ function ReportsPage() {
                   <td className="px-5 py-3">{r.label}</td>
                   <td className="num px-5 py-3 text-right text-success">{inr(r.Income)}</td>
                   <td className="num px-5 py-3 text-right text-destructive">{inr(r.Expense)}</td>
-                  <td className="num px-5 py-3 text-right">{inr(r.Investment)}</td>
+                  <td className={`num px-5 py-3 text-right ${r.Investment < 0 ? "text-destructive" : r.Investment > 0 ? "text-success" : ""}`}>
+                    {inr(r.Investment)}
+                  </td>
                   <td className="num px-5 py-3 text-right font-medium">{inr(r.Income - r.Expense)}</td>
                 </tr>
               ))}

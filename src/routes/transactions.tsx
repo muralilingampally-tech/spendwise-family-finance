@@ -15,6 +15,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useApp } from "@/lib/store";
+import { signedInvestment } from "@/lib/investment";
 import { inr, normalizeDate, shortDate, todayISO } from "@/lib/format";
 import { NECESSITY_GROUPS } from "@/lib/seed";
 import type { Necessity, Transaction, TransactionType } from "@/lib/types";
@@ -243,11 +244,12 @@ function TransactionsPage() {
     let investment = 0;
     filtered.forEach((t) => {
       if (t.type === "income") income += Number(t.amount);
-      else if (t.type === "investment") investment += Number(t.amount);
+      else if (t.type === "investment")
+        investment += signedInvestment(nameOf(t.subGroupId), Number(t.amount));
       else expense += Number(t.amount);
     });
     return { income, expense, investment };
-  }, [filtered]);
+  }, [filtered, nameOf]);
 
   const openNew = () => {
     setEditing(null);
@@ -597,7 +599,7 @@ function TransactionsPage() {
         <span>{filtered.length} entries</span>
         <span className="text-success">Income {inr(totals.income)}</span>
         <span className="text-destructive">Expense {inr(totals.expense)}</span>
-        <span className="text-primary">Investments {inr(totals.investment)}</span>
+          <span className="text-primary">Investments (net) {inr(totals.investment)}</span>
       </div>
 
       <section className="card-surface mt-4 overflow-x-auto">
