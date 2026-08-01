@@ -3,8 +3,11 @@ export type Role = "admin" | "member" | "viewer";
 export type MasterCollection =
   | "expenseGroups"
   | "expenseSubGroups"
+  | "expenseIncludes"
   | "incomeGroups"
   | "incomeSubGroups"
+  | "investmentGroups"
+  | "investmentSubGroups"
   | "paymentSources";
 
 export interface AppUser {
@@ -28,7 +31,10 @@ export interface MasterItem {
   updatedAt: string;
 }
 
-export type TransactionType = "income" | "expense";
+export type TransactionType = "income" | "expense" | "investment";
+
+/** Optional essential / discretionary tag (offered for Outside food). */
+export type Necessity = "essential" | "discretionary";
 
 export interface Transaction {
   id: string;
@@ -36,6 +42,9 @@ export interface Transaction {
   type: TransactionType;
   groupId: string;
   subGroupId: string | null;
+  /** Third master level: the specific item included in the sub group. */
+  includesId?: string | null;
+  necessity?: Necessity | null;
   paymentSourceId: string;
   amount: number;
   remarks: string;
@@ -69,15 +78,21 @@ export interface Budget {
 export const MASTER_LABELS: Record<MasterCollection, { title: string; singular: string }> = {
   expenseGroups: { title: "Expense Groups", singular: "Expense Group" },
   expenseSubGroups: { title: "Expense Sub Groups", singular: "Expense Sub Group" },
+  expenseIncludes: { title: "Includes", singular: "Includes Item" },
   incomeGroups: { title: "Income Groups", singular: "Income Group" },
   incomeSubGroups: { title: "Income Sub Groups", singular: "Income Sub Group" },
+  investmentGroups: { title: "Investment Groups", singular: "Investment Group" },
+  investmentSubGroups: { title: "Investment Sub Groups", singular: "Investment Sub Group" },
   paymentSources: { title: "Payment Sources", singular: "Payment Source" },
 };
 
 export const MASTER_SLUGS: Record<string, MasterCollection> = {
   "expense-groups": "expenseGroups",
   "expense-sub-groups": "expenseSubGroups",
+  includes: "expenseIncludes",
   "income-groups": "incomeGroups",
   "income-sub-groups": "incomeSubGroups",
+  "investment-groups": "investmentGroups",
+  "investment-sub-groups": "investmentSubGroups",
   "payment-sources": "paymentSources",
 };
