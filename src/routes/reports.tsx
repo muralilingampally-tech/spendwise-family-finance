@@ -526,6 +526,7 @@ function ReportsPage() {
                 <th className="px-3 py-2.5 text-right font-medium">Entries</th>
                 <th className="px-3 py-2.5 text-right font-medium">Income</th>
                 <th className="px-3 py-2.5 text-right font-medium">Expense</th>
+                <th className="px-3 py-2.5 text-right font-medium">Invested</th>
                 <th className="px-3 py-2.5 text-right font-medium">Net</th>
                 <th className="px-5 py-2.5 text-right font-medium">% of expense</th>
               </tr>
@@ -548,6 +549,7 @@ function ReportsPage() {
                     <td className="num px-3 py-3 text-right text-muted-foreground">{g.count}</td>
                     <td className="num px-3 py-3 text-right text-success">{inr(g.income)}</td>
                     <td className="num px-3 py-3 text-right text-destructive">{inr(g.expense)}</td>
+                    <td className="num px-3 py-3 text-right">{inr(g.investment)}</td>
                     <td className="num px-3 py-3 text-right font-medium">{inr(g.income - g.expense)}</td>
                     <td className="num px-5 py-3 text-right text-muted-foreground">
                       {totals.expense > 0 ? `${((g.expense / totals.expense) * 100).toFixed(1)}%` : "—"}
@@ -560,6 +562,7 @@ function ReportsPage() {
                         <td className="num px-3 py-2.5 text-right text-muted-foreground">{s.count}</td>
                         <td className="num px-3 py-2.5 text-right">{inr(s.income)}</td>
                         <td className="num px-3 py-2.5 text-right">{inr(s.expense)}</td>
+                        <td className="num px-3 py-2.5 text-right">{inr(s.investment)}</td>
                         <td className="num px-3 py-2.5 text-right">{inr(s.income - s.expense)}</td>
                         <td className="num px-5 py-2.5 text-right text-muted-foreground">
                           {totals.expense > 0 ? `${((s.expense / totals.expense) * 100).toFixed(1)}%` : "—"}
@@ -570,7 +573,7 @@ function ReportsPage() {
               ))}
               {groupTree.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="px-5 py-10 text-center text-muted-foreground">
+                  <td colSpan={7} className="px-5 py-10 text-center text-muted-foreground">
                     No entries for the selected period.
                   </td>
                 </tr>
@@ -583,6 +586,7 @@ function ReportsPage() {
                   <td className="num px-3 py-3 text-right">{totals.count}</td>
                   <td className="num px-3 py-3 text-right">{inr(totals.income)}</td>
                   <td className="num px-3 py-3 text-right">{inr(totals.expense)}</td>
+                  <td className="num px-3 py-3 text-right">{inr(totals.investment)}</td>
                   <td className="num px-3 py-3 text-right">{inr(totals.balance)}</td>
                   <td className="num px-5 py-3 text-right">100%</td>
                 </tr>
@@ -605,10 +609,13 @@ function ReportsPage() {
                       ? "Source"
                       : dimension === "user"
                         ? "User"
-                        : "Category"}
+                        : dimension === "necessity"
+                          ? "Tag"
+                          : "Category"}
                 </th>
                 <th className="px-5 py-2.5 text-right font-medium">Income</th>
                 <th className="px-5 py-2.5 text-right font-medium">Expense</th>
+                <th className="px-5 py-2.5 text-right font-medium">Invested</th>
                 <th className="px-5 py-2.5 text-right font-medium">Net</th>
               </tr>
             </thead>
@@ -618,12 +625,13 @@ function ReportsPage() {
                   <td className="px-5 py-3">{r.label}</td>
                   <td className="num px-5 py-3 text-right text-success">{inr(r.Income)}</td>
                   <td className="num px-5 py-3 text-right text-destructive">{inr(r.Expense)}</td>
+                  <td className="num px-5 py-3 text-right">{inr(r.Investment)}</td>
                   <td className="num px-5 py-3 text-right font-medium">{inr(r.Income - r.Expense)}</td>
                 </tr>
               ))}
               {breakdown.length === 0 && (
                 <tr>
-                  <td colSpan={4} className="px-5 py-10 text-center text-muted-foreground">
+                  <td colSpan={5} className="px-5 py-10 text-center text-muted-foreground">
                     Nothing to report for this selection.
                   </td>
                 </tr>
@@ -635,6 +643,7 @@ function ReportsPage() {
                   <td className="px-5 py-3">Total</td>
                   <td className="num px-5 py-3 text-right">{inr(totals.income)}</td>
                   <td className="num px-5 py-3 text-right">{inr(totals.expense)}</td>
+                  <td className="num px-5 py-3 text-right">{inr(totals.investment)}</td>
                   <td className="num px-5 py-3 text-right">{inr(totals.balance)}</td>
                 </tr>
               </tfoot>
