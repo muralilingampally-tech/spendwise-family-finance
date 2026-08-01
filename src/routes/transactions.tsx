@@ -16,7 +16,8 @@ import {
 } from "@/components/ui/dialog";
 import { useApp } from "@/lib/store";
 import { inr, normalizeDate, shortDate, todayISO } from "@/lib/format";
-import type { Transaction, TransactionType } from "@/lib/types";
+import { NECESSITY_GROUPS } from "@/lib/seed";
+import type { Necessity, Transaction, TransactionType } from "@/lib/types";
 
 export const Route = createFileRoute("/transactions")({
   head: () => ({
@@ -38,6 +39,8 @@ type FormValues = {
   type: TransactionType;
   groupId: string;
   subGroupId: string;
+  includesId: string;
+  necessity: "" | Necessity;
   paymentSourceId: string;
   amount: string;
   remarks: string;
@@ -49,6 +52,8 @@ const emptyValues: FormValues = {
   type: "expense",
   groupId: "",
   subGroupId: "",
+  includesId: "",
+  necessity: "",
   paymentSourceId: "",
   amount: "",
   remarks: "",
@@ -135,11 +140,26 @@ function TransactionsPage() {
   const form = useForm<FormValues>({ defaultValues: emptyValues });
   const type = form.watch("type");
   const groupId = form.watch("groupId");
+  const subGroupId = form.watch("subGroupId");
 
-  const groups = type === "income" ? masters.incomeGroups : masters.expenseGroups;
-  const subGroups = (type === "income" ? masters.incomeSubGroups : masters.expenseSubGroups).filter(
-    (s) => s.parentId === groupId,
-  );
+  const groups =
+    type === "income"
+      ? masters.incomeGroups
+      : type === "investment"
+        ? masters.investmentGroups
+        : masters.expenseGroups;
+  const subGroups = (
+    type === "income"
+      ? masters.incomeSubGroups
+      : type === "investment"
+        ? masters.investmentSubGroups
+        : masters.expenseSubGroups
+  ).filter((s) => s.parentId === groupId);
+  const includesOptions =
+    type === "expense" ? masters.expenseIncludes.filter((i) => i.parentId === subGroupId) : [];
+  const showNecessity =
+    type === "expense" &&
+    NECESSITY_GROUPS.includes(masters.expenseGroups.find((g) => g.id === groupId)?.name ?? "");
 
   const nameOf = useMemo(() => {
     const map = new Map<string, string>();
