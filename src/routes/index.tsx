@@ -13,7 +13,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { ArrowDownRight, ArrowUpRight, Scale } from "lucide-react";
+import { ArrowDownRight, ArrowUpRight, PiggyBank, Scale } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
 import { Button } from "@/components/ui/button";
 import { useApp } from "@/lib/store";
@@ -57,29 +57,34 @@ function Dashboard() {
   }, [members, user, transactions]);
 
   const byUser = useMemo(() => {
-    const map = new Map<string, { name: string; Income: number; Expense: number }>();
+    const map = new Map<string, { name: string; Income: number; Expense: number; Investment: number }>();
     transactions.forEach((t) => {
       const name = memberName(t);
-      const row = map.get(name) ?? { name, Income: 0, Expense: 0 };
+      const row = map.get(name) ?? { name, Income: 0, Expense: 0, Investment: 0 };
       if (t.type === "income") row.Income += Number(t.amount);
+      else if (t.type === "investment") row.Investment += Number(t.amount);
       else row.Expense += Number(t.amount);
       map.set(name, row);
     });
-    return [...map.values()].sort((a, b) => b.Expense - a.Expense);
+    return [...map.values()].sort((a, b) => b.Income + b.Expense - (a.Income + a.Expense));
   }, [transactions, memberName]);
 
   const totals = useMemo(() => {
     let income = 0;
     let expense = 0;
-    transactions.forEach((t) =>
-      t.type === "income" ? (income += Number(t.amount)) : (expense += Number(t.amount)),
-    );
-    return { income, expense, balance: income - expense };
+    let investment = 0;
+    transactions.forEach((t) => {
+      if (t.type === "income") income += Number(t.amount);
+      else if (t.type === "investment") investment += Number(t.amount);
+      else expense += Number(t.amount);
+    });
+    return { income, expense, investment, balance: income - expense };
   }, [transactions]);
 
   const monthly = useMemo(() => {
     const map = new Map<string, { month: string; Income: number; Expense: number }>();
     transactions.forEach((t) => {
+      if (t.type === "investment") return;
       const k = monthKey(t.date);
       const row = map.get(k) ?? { month: k, Income: 0, Expense: 0 };
       if (t.type === "income") row.Income += Number(t.amount);
