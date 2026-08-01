@@ -81,7 +81,7 @@ function Dashboard() {
         investment += signedInvestment(nameOf(t.subGroupId), Number(t.amount));
       else expense += Number(t.amount);
     });
-    return { income, expense, investment, balance: income - expense };
+    return { income, expense, investment, balance: income - expense + investment };
   }, [transactions, nameOf]);
 
   const monthly = useMemo(() => {
