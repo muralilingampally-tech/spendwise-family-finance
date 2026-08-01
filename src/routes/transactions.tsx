@@ -640,15 +640,29 @@ function TransactionsPage() {
                 id="type"
                 className={selectClass}
                 {...form.register("type", {
-                  onChange: () => form.reset({ ...form.getValues(), groupId: "", subGroupId: "" }),
+                  onChange: () =>
+                    form.reset({
+                      ...form.getValues(),
+                      groupId: "",
+                      subGroupId: "",
+                      includesId: "",
+                      necessity: "",
+                    }),
                 })}
               >
                 <option value="expense">Expense</option>
                 <option value="income">Income</option>
+                <option value="investment">Investment</option>
               </select>
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="groupId">{type === "income" ? "Income group" : "Expense group"}</Label>
+              <Label htmlFor="groupId">
+                {type === "income"
+                  ? "Income group"
+                  : type === "investment"
+                    ? "Investment group"
+                    : "Expense group"}
+              </Label>
               <select id="groupId" className={selectClass} {...form.register("groupId", { required: true })}>
                 <option value="">Select…</option>
                 {groups.map((g) => (
@@ -660,7 +674,13 @@ function TransactionsPage() {
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="subGroupId">Sub group</Label>
-              <select id="subGroupId" className={selectClass} {...form.register("subGroupId")}>
+              <select
+                id="subGroupId"
+                className={selectClass}
+                {...form.register("subGroupId", {
+                  onChange: () => form.setValue("includesId", ""),
+                })}
+              >
                 <option value="">Select…</option>
                 {subGroups.map((s) => (
                   <option key={s.id} value={s.id}>
@@ -669,6 +689,29 @@ function TransactionsPage() {
                 ))}
               </select>
             </div>
+            {includesOptions.length > 0 && (
+              <div className="space-y-1.5">
+                <Label htmlFor="includesId">Includes</Label>
+                <select id="includesId" className={selectClass} {...form.register("includesId")}>
+                  <option value="">Select…</option>
+                  {includesOptions.map((i) => (
+                    <option key={i.id} value={i.id}>
+                      {i.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+            {showNecessity && (
+              <div className="space-y-1.5">
+                <Label htmlFor="necessity">Essential or discretionary</Label>
+                <select id="necessity" className={selectClass} {...form.register("necessity")}>
+                  <option value="">Not specified</option>
+                  <option value="essential">Essential</option>
+                  <option value="discretionary">Discretionary</option>
+                </select>
+              </div>
+            )}
             <div className="space-y-1.5">
               <Label htmlFor="paymentSourceId">Payment source</Label>
               <select
