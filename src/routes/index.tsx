@@ -119,9 +119,28 @@ function Dashboard() {
         </Button>
       }
     >
-      <div className="grid gap-4 sm:grid-cols-3">
-        <StatCard label="Total Income" value={totals.income} icon={ArrowUpRight} tone="success" />
-        <StatCard label="Total Expense" value={totals.expense} icon={ArrowDownRight} tone="destructive" />
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <StatCard
+          label="Total Income"
+          value={totals.income}
+          icon={ArrowUpRight}
+          tone="success"
+          breakdown={byUser.map((r) => ({ name: r.name, value: r.Income }))}
+        />
+        <StatCard
+          label="Total Expense"
+          value={totals.expense}
+          icon={ArrowDownRight}
+          tone="destructive"
+          breakdown={byUser.map((r) => ({ name: r.name, value: r.Expense }))}
+        />
+        <StatCard
+          label="Investments"
+          value={totals.investment}
+          icon={PiggyBank}
+          tone="primary"
+          breakdown={byUser.map((r) => ({ name: r.name, value: r.Investment }))}
+        />
         <StatCard label="Balance" value={totals.balance} icon={Scale} tone="primary" />
       </div>
 
@@ -194,6 +213,7 @@ function Dashboard() {
                 <th className="px-5 py-2.5 font-medium">User</th>
                 <th className="px-5 py-2.5 text-right font-medium">Income</th>
                 <th className="px-5 py-2.5 text-right font-medium">Expense</th>
+                <th className="px-5 py-2.5 text-right font-medium">Investments</th>
                 <th className="px-5 py-2.5 text-right font-medium">Net</th>
               </tr>
             </thead>
@@ -203,12 +223,13 @@ function Dashboard() {
                   <td className="px-5 py-3">{r.name}</td>
                   <td className="num px-5 py-3 text-right text-success">{inr(r.Income)}</td>
                   <td className="num px-5 py-3 text-right text-destructive">{inr(r.Expense)}</td>
+                  <td className="num px-5 py-3 text-right">{inr(r.Investment)}</td>
                   <td className="num px-5 py-3 text-right font-medium">{inr(r.Income - r.Expense)}</td>
                 </tr>
               ))}
               {byUser.length === 0 && (
                 <tr>
-                  <td colSpan={4} className="px-5 py-10 text-center text-muted-foreground">
+                  <td colSpan={5} className="px-5 py-10 text-center text-muted-foreground">
                     No transactions yet.
                   </td>
                 </tr>
@@ -220,6 +241,7 @@ function Dashboard() {
                   <td className="px-5 py-3">Total</td>
                   <td className="num px-5 py-3 text-right">{inr(totals.income)}</td>
                   <td className="num px-5 py-3 text-right">{inr(totals.expense)}</td>
+                  <td className="num px-5 py-3 text-right">{inr(totals.investment)}</td>
                   <td className="num px-5 py-3 text-right">{inr(totals.balance)}</td>
                 </tr>
               </tfoot>
@@ -286,26 +308,41 @@ function StatCard({
   value,
   icon: Icon,
   tone,
+  breakdown,
 }: {
   label: string;
   value: number;
   icon: React.ComponentType<{ className?: string }>;
   tone: "success" | "destructive" | "primary";
+  breakdown?: { name: string; value: number }[];
 }) {
   const toneClass = {
     success: "bg-success/10 text-success",
     destructive: "bg-destructive/10 text-destructive",
     primary: "bg-primary/10 text-primary",
   }[tone];
+  const rows = (breakdown ?? []).filter((r) => r.value > 0);
   return (
-    <div className="card-surface flex items-center gap-4 p-5">
-      <span className={`grid h-11 w-11 place-items-center rounded-xl ${toneClass}`}>
-        <Icon className="h-5 w-5" />
-      </span>
-      <div>
-        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{label}</p>
-        <p className="num mt-0.5 text-2xl font-bold tracking-tight">{inr(value)}</p>
+    <div className="card-surface p-5">
+      <div className="flex items-center gap-4">
+        <span className={`grid h-11 w-11 place-items-center rounded-xl ${toneClass}`}>
+          <Icon className="h-5 w-5" />
+        </span>
+        <div>
+          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{label}</p>
+          <p className="num mt-0.5 text-2xl font-bold tracking-tight">{inr(value)}</p>
+        </div>
       </div>
+      {rows.length > 0 && (
+        <ul className="mt-3 space-y-1 border-t border-border pt-3 text-sm">
+          {rows.map((r) => (
+            <li key={r.name} className="flex items-center justify-between gap-3">
+              <span className="truncate text-muted-foreground">{r.name}</span>
+              <span className="num font-medium">{inr(r.value)}</span>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }
