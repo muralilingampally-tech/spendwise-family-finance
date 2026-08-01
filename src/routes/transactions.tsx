@@ -243,11 +243,12 @@ function TransactionsPage() {
     let investment = 0;
     filtered.forEach((t) => {
       if (t.type === "income") income += Number(t.amount);
-      else if (t.type === "investment") investment += Number(t.amount);
+      else if (t.type === "investment")
+        investment += signedInvestment(nameOf(t.subGroupId), Number(t.amount));
       else expense += Number(t.amount);
     });
     return { income, expense, investment };
-  }, [filtered]);
+  }, [filtered, nameOf]);
 
   const openNew = () => {
     setEditing(null);
