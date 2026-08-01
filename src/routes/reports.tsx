@@ -423,10 +423,16 @@ function ReportsPage() {
         </div>
       </section>
 
-      <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+      <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
         <Stat label="Income" value={inr(totals.income)} tone="text-success" />
         <Stat label="Expense" value={inr(totals.expense)} tone="text-destructive" />
-        <Stat label="Investments" value={inr(totals.investment)} tone="text-primary" />
+        <Stat label="Invested" value={inr(totals.invested)} tone="text-destructive" />
+        <Stat label="Realized" value={inr(totals.realized)} tone="text-success" />
+        <Stat
+          label="Investment net"
+          value={inr(totals.investment)}
+          tone={totals.investment < 0 ? "text-destructive" : "text-success"}
+        />
         <Stat label="Balance" value={inr(totals.balance)} tone="text-primary" />
         <Stat label="Entries" value={String(totals.count)} tone="" />
       </div>
@@ -455,6 +461,7 @@ function ReportsPage() {
                 <Legend />
                 <Bar dataKey="Income" fill="var(--chart-3)" radius={[6, 6, 0, 0]} />
                 <Bar dataKey="Expense" fill="var(--chart-2)" radius={[6, 6, 0, 0]} />
+                <Bar dataKey="Investment" fill="var(--chart-1)" radius={[6, 6, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           )}
@@ -523,6 +530,7 @@ function ReportsPage() {
                   <Legend />
                   <Line type="monotone" dataKey="Income" stroke="var(--chart-3)" strokeWidth={2} dot={false} />
                   <Line type="monotone" dataKey="Expense" stroke="var(--chart-2)" strokeWidth={2} dot={false} />
+                  <Line type="monotone" dataKey="Investment" stroke="var(--chart-1)" strokeWidth={2} dot={false} />
                   <Line type="monotone" dataKey="Net" stroke="var(--chart-4)" strokeWidth={2} strokeDasharray="4 4" dot={false} />
                 </LineChart>
               </ResponsiveContainer>
