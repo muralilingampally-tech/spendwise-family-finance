@@ -160,7 +160,7 @@ function MastersPage() {
           <thead className="bg-muted/60 text-left text-xs uppercase tracking-wide text-muted-foreground">
             <tr>
               <th className="px-4 py-2.5 font-medium">Name</th>
-              {isSub && <th className="px-4 py-2.5 font-medium">Parent group</th>}
+              {isSub && <th className="px-4 py-2.5 font-medium">{parentLabel}</th>}
               {isSource && <th className="px-4 py-2.5 font-medium">Type</th>}
               <th className="px-4 py-2.5" />
             </tr>
@@ -226,7 +226,7 @@ function MastersPage() {
             </div>
             {isSub && (
               <div className="space-y-1.5">
-                <Label htmlFor="master-parent">Parent group</Label>
+                <Label htmlFor="master-parent">{parentLabel}</Label>
                 <select
                   id="master-parent"
                   className={selectClass}
