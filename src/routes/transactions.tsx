@@ -599,7 +599,7 @@ function TransactionsPage() {
         <span>{filtered.length} entries</span>
         <span className="text-success">Income {inr(totals.income)}</span>
         <span className="text-destructive">Expense {inr(totals.expense)}</span>
-        <span className="text-primary">Investments {inr(totals.investment)}</span>
+          <span className="text-primary">Investments (net) {inr(totals.investment)}</span>
       </div>
 
       <section className="card-surface mt-4 overflow-x-auto">
