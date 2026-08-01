@@ -371,6 +371,10 @@ function TransactionsPage() {
       const amountIndex = findColumn(["amount"]);
       const remarksIndex = findColumn(["remarks"]);
       const entryByIndex = header.findIndex((value) => value === "entryby");
+      const includesIndex = header.findIndex((value) => value === "includes");
+      const necessityIndex = header.findIndex(
+        (value) => value === "necessity" || value === "tag",
+      );
 
       const groupLookup = new Map<string, string>();
       masters.expenseGroups.forEach((item) => {
@@ -379,6 +383,9 @@ function TransactionsPage() {
       masters.incomeGroups.forEach((item) => {
         groupLookup.set(`income:${item.name.trim().toLowerCase()}`, item.id);
       });
+      masters.investmentGroups.forEach((item) => {
+        groupLookup.set(`investment:${item.name.trim().toLowerCase()}`, item.id);
+      });
 
       const subGroupLookup = new Map<string, string>();
       masters.expenseSubGroups.forEach((item) => {
@@ -386,6 +393,14 @@ function TransactionsPage() {
       });
       masters.incomeSubGroups.forEach((item) => {
         subGroupLookup.set(`income:${item.name.trim().toLowerCase()}`, item.id);
+      });
+      masters.investmentSubGroups.forEach((item) => {
+        subGroupLookup.set(`investment:${item.name.trim().toLowerCase()}`, item.id);
+      });
+
+      const includesLookup = new Map<string, string>();
+      masters.expenseIncludes.forEach((item) => {
+        includesLookup.set(item.name.trim().toLowerCase(), item.id);
       });
 
       const paymentSourceLookup = new Map<string, string>();
@@ -408,6 +423,9 @@ function TransactionsPage() {
         const amount = Number(record[amountIndex]?.trim());
         const remarks = record[remarksIndex]?.trim() ?? "";
         const entryByName = entryByIndex >= 0 ? record[entryByIndex]?.trim() ?? "" : "";
+        const includesName = includesIndex >= 0 ? record[includesIndex]?.trim() ?? "" : "";
+        const necessityRaw =
+          necessityIndex >= 0 ? (record[necessityIndex]?.trim().toLowerCase() ?? "") : "";
 
         const date = normalizeDate(rawDate);
         if (!date) {
@@ -415,8 +433,8 @@ function TransactionsPage() {
             `Row ${row}: could not read the date "${rawDate ?? ""}". Use yyyy-mm-dd, dd/mm/yyyy or 31 Jul 2026.`,
           );
         }
-        if (type !== "income" && type !== "expense") {
-          throw new Error(`Row ${row}: type must be income or expense.`);
+        if (type !== "income" && type !== "expense" && type !== "investment") {
+          throw new Error(`Row ${row}: type must be income, expense or investment.`);
         }
         if (!Number.isFinite(amount) || amount <= 0) {
           throw new Error(`Row ${row}: amount must be greater than zero.`);
@@ -445,6 +463,11 @@ function TransactionsPage() {
           type,
           groupId,
           subGroupId,
+          includesId: includesName ? includesLookup.get(includesName.toLowerCase()) ?? null : null,
+          necessity:
+            necessityRaw === "essential" || necessityRaw === "discretionary"
+              ? (necessityRaw as Necessity)
+              : null,
           paymentSourceId,
           amount,
           remarks,
