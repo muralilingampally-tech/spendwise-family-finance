@@ -44,7 +44,7 @@ export const Route = createFileRoute("/reports")({
 });
 
 type Preset = "month" | "lastMonth" | "year" | "lastYear" | "all" | "custom";
-type Dimension = "group" | "subGroup" | "source" | "month" | "user";
+type Dimension = "group" | "subGroup" | "includes" | "source" | "month" | "user" | "necessity";
 
 const PIE_COLORS = [
   "var(--chart-1)",
@@ -139,26 +139,34 @@ function ReportsPage() {
   const totals = useMemo(() => {
     let income = 0;
     let expense = 0;
-    rows.forEach((t) =>
-      t.type === "income" ? (income += Number(t.amount)) : (expense += Number(t.amount)),
-    );
-    return { income, expense, balance: income - expense, count: rows.length };
+    let investment = 0;
+    rows.forEach((t) => {
+      if (t.type === "income") income += Number(t.amount);
+      else if (t.type === "investment") investment += Number(t.amount);
+      else expense += Number(t.amount);
+    });
+    return { income, expense, investment, balance: income - expense, count: rows.length };
   }, [rows]);
 
   const keyFor = (t: (typeof rows)[number]) => {
     if (dimension === "group") return nameOf(t.groupId);
     if (dimension === "subGroup") return `${nameOf(t.groupId)} › ${nameOf(t.subGroupId)}`;
+    if (dimension === "includes")
+      return t.includesId ? `${nameOf(t.subGroupId)} › ${nameOf(t.includesId)}` : "Not specified";
+    if (dimension === "necessity")
+      return t.necessity ? t.necessity[0].toUpperCase() + t.necessity.slice(1) : "Not tagged";
     if (dimension === "source") return nameOf(t.paymentSourceId);
     if (dimension === "user") return memberName(t);
     return monthKey(t.date);
   };
 
   const breakdown = useMemo(() => {
-    const map = new Map<string, { label: string; Income: number; Expense: number }>();
+    const map = new Map<string, { label: string; Income: number; Expense: number; Investment: number }>();
     rows.forEach((t) => {
       const k = keyFor(t);
-      const row = map.get(k) ?? { label: k, Income: 0, Expense: 0 };
+      const row = map.get(k) ?? { label: k, Income: 0, Expense: 0, Investment: 0 };
       if (t.type === "income") row.Income += Number(t.amount);
+      else if (t.type === "investment") row.Investment += Number(t.amount);
       else row.Expense += Number(t.amount);
       map.set(k, row);
     });
@@ -179,21 +187,30 @@ function ReportsPage() {
         label: string;
         income: number;
         expense: number;
+        investment: number;
         count: number;
-        subs: Map<string, { label: string; income: number; expense: number; count: number }>;
+        subs: Map<
+          string,
+          { label: string; income: number; expense: number; investment: number; count: number }
+        >;
       }
     >();
     rows.forEach((t) => {
       const gid = t.groupId || "none";
       const group =
         map.get(gid) ??
-        { id: gid, label: nameOf(t.groupId), income: 0, expense: 0, count: 0, subs: new Map() };
+        { id: gid, label: nameOf(t.groupId), income: 0, expense: 0, investment: 0, count: 0, subs: new Map() };
       const sid = t.subGroupId || "none";
-      const sub = group.subs.get(sid) ?? { label: nameOf(t.subGroupId), income: 0, expense: 0, count: 0 };
+      const sub =
+        group.subs.get(sid) ??
+        { label: nameOf(t.subGroupId), income: 0, expense: 0, investment: 0, count: 0 };
       const amount = Number(t.amount);
       if (t.type === "income") {
         group.income += amount;
         sub.income += amount;
+      } else if (t.type === "investment") {
+        group.investment += amount;
+        sub.investment += amount;
       } else {
         group.expense += amount;
         sub.expense += amount;
@@ -225,6 +242,7 @@ function ReportsPage() {
   const trend = useMemo(() => {
     const map = new Map<string, { key: string; Income: number; Expense: number }>();
     rows.forEach((t) => {
+      if (t.type === "investment") return;
       const k = monthKey(t.date);
       const row = map.get(k) ?? { key: k, Income: 0, Expense: 0 };
       if (t.type === "income") row.Income += Number(t.amount);
@@ -237,12 +255,25 @@ function ReportsPage() {
   }, [rows]);
 
   const exportCsv = () => {
-    const head = ["Date", "Type", "Group", "Sub group", "Payment source", "User", "Amount", "Remarks"];
+    const head = [
+      "Date",
+      "Type",
+      "Group",
+      "Sub group",
+      "Includes",
+      "Necessity",
+      "Payment source",
+      "User",
+      "Amount",
+      "Remarks",
+    ];
     const body = rows.map((t) => [
       t.date,
       t.type,
       nameOf(t.groupId),
       nameOf(t.subGroupId),
+      t.includesId ? nameOf(t.includesId) : "",
+      t.necessity ?? "",
       nameOf(t.paymentSourceId),
       memberName(t),
       String(t.amount),
@@ -317,9 +348,10 @@ function ReportsPage() {
               value={type}
               onChange={(e) => setType(e.target.value as typeof type)}
             >
-              <option value="all">Income &amp; expense</option>
+              <option value="all">All entries</option>
               <option value="expense">Expense only</option>
               <option value="income">Income only</option>
+              <option value="investment">Investments only</option>
             </select>
           </div>
           <div className="space-y-1.5">
@@ -332,6 +364,8 @@ function ReportsPage() {
             >
               <option value="group">Group</option>
               <option value="subGroup">Sub group</option>
+              <option value="includes">Includes</option>
+              <option value="necessity">Essential / discretionary</option>
               <option value="source">Payment source</option>
               <option value="month">Month</option>
               <option value="user">User</option>
@@ -372,9 +406,10 @@ function ReportsPage() {
         </div>
       </section>
 
-      <div className="mt-4 grid gap-4 sm:grid-cols-4">
+      <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
         <Stat label="Income" value={inr(totals.income)} tone="text-success" />
         <Stat label="Expense" value={inr(totals.expense)} tone="text-destructive" />
+        <Stat label="Investments" value={inr(totals.investment)} tone="text-primary" />
         <Stat label="Balance" value={inr(totals.balance)} tone="text-primary" />
         <Stat label="Entries" value={String(totals.count)} tone="" />
       </div>
@@ -491,6 +526,7 @@ function ReportsPage() {
                 <th className="px-3 py-2.5 text-right font-medium">Entries</th>
                 <th className="px-3 py-2.5 text-right font-medium">Income</th>
                 <th className="px-3 py-2.5 text-right font-medium">Expense</th>
+                <th className="px-3 py-2.5 text-right font-medium">Invested</th>
                 <th className="px-3 py-2.5 text-right font-medium">Net</th>
                 <th className="px-5 py-2.5 text-right font-medium">% of expense</th>
               </tr>
@@ -513,6 +549,7 @@ function ReportsPage() {
                     <td className="num px-3 py-3 text-right text-muted-foreground">{g.count}</td>
                     <td className="num px-3 py-3 text-right text-success">{inr(g.income)}</td>
                     <td className="num px-3 py-3 text-right text-destructive">{inr(g.expense)}</td>
+                    <td className="num px-3 py-3 text-right">{inr(g.investment)}</td>
                     <td className="num px-3 py-3 text-right font-medium">{inr(g.income - g.expense)}</td>
                     <td className="num px-5 py-3 text-right text-muted-foreground">
                       {totals.expense > 0 ? `${((g.expense / totals.expense) * 100).toFixed(1)}%` : "—"}
@@ -525,6 +562,7 @@ function ReportsPage() {
                         <td className="num px-3 py-2.5 text-right text-muted-foreground">{s.count}</td>
                         <td className="num px-3 py-2.5 text-right">{inr(s.income)}</td>
                         <td className="num px-3 py-2.5 text-right">{inr(s.expense)}</td>
+                        <td className="num px-3 py-2.5 text-right">{inr(s.investment)}</td>
                         <td className="num px-3 py-2.5 text-right">{inr(s.income - s.expense)}</td>
                         <td className="num px-5 py-2.5 text-right text-muted-foreground">
                           {totals.expense > 0 ? `${((s.expense / totals.expense) * 100).toFixed(1)}%` : "—"}
@@ -535,7 +573,7 @@ function ReportsPage() {
               ))}
               {groupTree.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="px-5 py-10 text-center text-muted-foreground">
+                  <td colSpan={7} className="px-5 py-10 text-center text-muted-foreground">
                     No entries for the selected period.
                   </td>
                 </tr>
@@ -548,6 +586,7 @@ function ReportsPage() {
                   <td className="num px-3 py-3 text-right">{totals.count}</td>
                   <td className="num px-3 py-3 text-right">{inr(totals.income)}</td>
                   <td className="num px-3 py-3 text-right">{inr(totals.expense)}</td>
+                  <td className="num px-3 py-3 text-right">{inr(totals.investment)}</td>
                   <td className="num px-3 py-3 text-right">{inr(totals.balance)}</td>
                   <td className="num px-5 py-3 text-right">100%</td>
                 </tr>
@@ -570,10 +609,13 @@ function ReportsPage() {
                       ? "Source"
                       : dimension === "user"
                         ? "User"
-                        : "Category"}
+                        : dimension === "necessity"
+                          ? "Tag"
+                          : "Category"}
                 </th>
                 <th className="px-5 py-2.5 text-right font-medium">Income</th>
                 <th className="px-5 py-2.5 text-right font-medium">Expense</th>
+                <th className="px-5 py-2.5 text-right font-medium">Invested</th>
                 <th className="px-5 py-2.5 text-right font-medium">Net</th>
               </tr>
             </thead>
@@ -583,12 +625,13 @@ function ReportsPage() {
                   <td className="px-5 py-3">{r.label}</td>
                   <td className="num px-5 py-3 text-right text-success">{inr(r.Income)}</td>
                   <td className="num px-5 py-3 text-right text-destructive">{inr(r.Expense)}</td>
+                  <td className="num px-5 py-3 text-right">{inr(r.Investment)}</td>
                   <td className="num px-5 py-3 text-right font-medium">{inr(r.Income - r.Expense)}</td>
                 </tr>
               ))}
               {breakdown.length === 0 && (
                 <tr>
-                  <td colSpan={4} className="px-5 py-10 text-center text-muted-foreground">
+                  <td colSpan={5} className="px-5 py-10 text-center text-muted-foreground">
                     Nothing to report for this selection.
                   </td>
                 </tr>
@@ -600,6 +643,7 @@ function ReportsPage() {
                   <td className="px-5 py-3">Total</td>
                   <td className="num px-5 py-3 text-right">{inr(totals.income)}</td>
                   <td className="num px-5 py-3 text-right">{inr(totals.expense)}</td>
+                  <td className="num px-5 py-3 text-right">{inr(totals.investment)}</td>
                   <td className="num px-5 py-3 text-right">{inr(totals.balance)}</td>
                 </tr>
               </tfoot>

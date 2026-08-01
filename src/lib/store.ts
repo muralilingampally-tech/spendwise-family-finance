@@ -7,8 +7,11 @@ import { normalizeDate } from "./format";
 const emptyMasters = {
   expenseGroups: [],
   expenseSubGroups: [],
+  expenseIncludes: [],
   incomeGroups: [],
   incomeSubGroups: [],
+  investmentGroups: [],
+  investmentSubGroups: [],
   paymentSources: [],
 } as Record<MasterCollection, MasterItem[]>;
 

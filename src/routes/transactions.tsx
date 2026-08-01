@@ -16,7 +16,8 @@ import {
 } from "@/components/ui/dialog";
 import { useApp } from "@/lib/store";
 import { inr, normalizeDate, shortDate, todayISO } from "@/lib/format";
-import type { Transaction, TransactionType } from "@/lib/types";
+import { NECESSITY_GROUPS } from "@/lib/seed";
+import type { Necessity, Transaction, TransactionType } from "@/lib/types";
 
 export const Route = createFileRoute("/transactions")({
   head: () => ({
@@ -38,6 +39,8 @@ type FormValues = {
   type: TransactionType;
   groupId: string;
   subGroupId: string;
+  includesId: string;
+  necessity: "" | Necessity;
   paymentSourceId: string;
   amount: string;
   remarks: string;
@@ -49,6 +52,8 @@ const emptyValues: FormValues = {
   type: "expense",
   groupId: "",
   subGroupId: "",
+  includesId: "",
+  necessity: "",
   paymentSourceId: "",
   amount: "",
   remarks: "",
@@ -135,11 +140,26 @@ function TransactionsPage() {
   const form = useForm<FormValues>({ defaultValues: emptyValues });
   const type = form.watch("type");
   const groupId = form.watch("groupId");
+  const subGroupId = form.watch("subGroupId");
 
-  const groups = type === "income" ? masters.incomeGroups : masters.expenseGroups;
-  const subGroups = (type === "income" ? masters.incomeSubGroups : masters.expenseSubGroups).filter(
-    (s) => s.parentId === groupId,
-  );
+  const groups =
+    type === "income"
+      ? masters.incomeGroups
+      : type === "investment"
+        ? masters.investmentGroups
+        : masters.expenseGroups;
+  const subGroups = (
+    type === "income"
+      ? masters.incomeSubGroups
+      : type === "investment"
+        ? masters.investmentSubGroups
+        : masters.expenseSubGroups
+  ).filter((s) => s.parentId === groupId);
+  const includesOptions =
+    type === "expense" ? masters.expenseIncludes.filter((i) => i.parentId === subGroupId) : [];
+  const showNecessity =
+    type === "expense" &&
+    NECESSITY_GROUPS.includes(masters.expenseGroups.find((g) => g.id === groupId)?.name ?? "");
 
   const nameOf = useMemo(() => {
     const map = new Map<string, string>();
@@ -167,13 +187,19 @@ function TransactionsPage() {
   }, [members, transactions, user]);
 
   const allGroupNames = useMemo(
-    () => [...masters.expenseGroups, ...masters.incomeGroups].map((g) => g.name),
-    [masters.expenseGroups, masters.incomeGroups],
+    () =>
+      [...masters.expenseGroups, ...masters.incomeGroups, ...masters.investmentGroups].map(
+        (g) => g.name,
+      ),
+    [masters.expenseGroups, masters.incomeGroups, masters.investmentGroups],
   );
 
   const allSubGroupNames = useMemo(
-    () => masters.expenseSubGroups.concat(masters.incomeSubGroups).map((g) => g.name),
-    [masters.expenseSubGroups, masters.incomeSubGroups],
+    () =>
+      masters.expenseSubGroups
+        .concat(masters.incomeSubGroups, masters.investmentSubGroups)
+        .map((g) => g.name),
+    [masters.expenseSubGroups, masters.incomeSubGroups, masters.investmentSubGroups],
   );
 
   const allPaymentSourceNames = useMemo(
@@ -214,10 +240,13 @@ function TransactionsPage() {
   const totals = useMemo(() => {
     let income = 0;
     let expense = 0;
-    filtered.forEach((t) =>
-      t.type === "income" ? (income += Number(t.amount)) : (expense += Number(t.amount)),
-    );
-    return { income, expense };
+    let investment = 0;
+    filtered.forEach((t) => {
+      if (t.type === "income") income += Number(t.amount);
+      else if (t.type === "investment") investment += Number(t.amount);
+      else expense += Number(t.amount);
+    });
+    return { income, expense, investment };
   }, [filtered]);
 
   const openNew = () => {
@@ -233,6 +262,8 @@ function TransactionsPage() {
       type: t.type,
       groupId: t.groupId,
       subGroupId: t.subGroupId ?? "",
+      includesId: t.includesId ?? "",
+      necessity: t.necessity ?? "",
       paymentSourceId: t.paymentSourceId,
       amount: String(t.amount),
       remarks: t.remarks ?? "",
@@ -256,6 +287,8 @@ function TransactionsPage() {
           type: values.type,
           groupId: values.groupId,
           subGroupId: values.subGroupId || null,
+          includesId: values.type === "expense" ? values.includesId || null : null,
+          necessity: values.type === "expense" ? (values.necessity || null) : null,
           paymentSourceId: values.paymentSourceId,
           amount,
           remarks: values.remarks.trim().slice(0, 500),
@@ -289,14 +322,38 @@ function TransactionsPage() {
       "Type",
       "Group",
       "Sub group",
+      "Includes",
+      "Necessity",
       "Payment source",
       "Amount",
       "Remarks",
       "Entry by",
     ];
     const exampleRows = [
-      [todayISO(), "expense", "Food", "Groceries", "Cash", "250", "Monthly grocery bill", user?.displayName || ""],
-      [todayISO(), "income", "Salary", "", "Bank", "12000", "Salary credit", user?.displayName || ""],
+      [
+        todayISO(),
+        "expense",
+        "Outside food",
+        "Food order",
+        "Munchies",
+        "discretionary",
+        "Swiggy Card",
+        "250",
+        "Evening order",
+        user?.displayName || "",
+      ],
+      [
+        todayISO(),
+        "income",
+        "Income",
+        "Salary",
+        "",
+        "",
+        "ICICI-MK",
+        "12000",
+        "Salary credit",
+        user?.displayName || "",
+      ],
     ];
     const csv = [
       ...helperLines,
@@ -338,6 +395,10 @@ function TransactionsPage() {
       const amountIndex = findColumn(["amount"]);
       const remarksIndex = findColumn(["remarks"]);
       const entryByIndex = header.findIndex((value) => value === "entryby");
+      const includesIndex = header.findIndex((value) => value === "includes");
+      const necessityIndex = header.findIndex(
+        (value) => value === "necessity" || value === "tag",
+      );
 
       const groupLookup = new Map<string, string>();
       masters.expenseGroups.forEach((item) => {
@@ -346,6 +407,9 @@ function TransactionsPage() {
       masters.incomeGroups.forEach((item) => {
         groupLookup.set(`income:${item.name.trim().toLowerCase()}`, item.id);
       });
+      masters.investmentGroups.forEach((item) => {
+        groupLookup.set(`investment:${item.name.trim().toLowerCase()}`, item.id);
+      });
 
       const subGroupLookup = new Map<string, string>();
       masters.expenseSubGroups.forEach((item) => {
@@ -353,6 +417,14 @@ function TransactionsPage() {
       });
       masters.incomeSubGroups.forEach((item) => {
         subGroupLookup.set(`income:${item.name.trim().toLowerCase()}`, item.id);
+      });
+      masters.investmentSubGroups.forEach((item) => {
+        subGroupLookup.set(`investment:${item.name.trim().toLowerCase()}`, item.id);
+      });
+
+      const includesLookup = new Map<string, string>();
+      masters.expenseIncludes.forEach((item) => {
+        includesLookup.set(item.name.trim().toLowerCase(), item.id);
       });
 
       const paymentSourceLookup = new Map<string, string>();
@@ -375,6 +447,9 @@ function TransactionsPage() {
         const amount = Number(record[amountIndex]?.trim());
         const remarks = record[remarksIndex]?.trim() ?? "";
         const entryByName = entryByIndex >= 0 ? record[entryByIndex]?.trim() ?? "" : "";
+        const includesName = includesIndex >= 0 ? record[includesIndex]?.trim() ?? "" : "";
+        const necessityRaw =
+          necessityIndex >= 0 ? (record[necessityIndex]?.trim().toLowerCase() ?? "") : "";
 
         const date = normalizeDate(rawDate);
         if (!date) {
@@ -382,8 +457,8 @@ function TransactionsPage() {
             `Row ${row}: could not read the date "${rawDate ?? ""}". Use yyyy-mm-dd, dd/mm/yyyy or 31 Jul 2026.`,
           );
         }
-        if (type !== "income" && type !== "expense") {
-          throw new Error(`Row ${row}: type must be income or expense.`);
+        if (type !== "income" && type !== "expense" && type !== "investment") {
+          throw new Error(`Row ${row}: type must be income, expense or investment.`);
         }
         if (!Number.isFinite(amount) || amount <= 0) {
           throw new Error(`Row ${row}: amount must be greater than zero.`);
@@ -412,6 +487,11 @@ function TransactionsPage() {
           type,
           groupId,
           subGroupId,
+          includesId: includesName ? includesLookup.get(includesName.toLowerCase()) ?? null : null,
+          necessity:
+            necessityRaw === "essential" || necessityRaw === "discretionary"
+              ? (necessityRaw as Necessity)
+              : null,
           paymentSourceId,
           amount,
           remarks,
@@ -469,6 +549,7 @@ function TransactionsPage() {
           <option value="all">All types</option>
           <option value="income">Income</option>
           <option value="expense">Expense</option>
+          <option value="investment">Investment</option>
         </select>
         <select
           className={selectClass}
@@ -476,7 +557,7 @@ function TransactionsPage() {
           onChange={(e) => setGroupFilter(e.target.value)}
         >
           <option value="">All categories</option>
-          {[...masters.expenseGroups, ...masters.incomeGroups].map((g) => (
+          {[...masters.expenseGroups, ...masters.incomeGroups, ...masters.investmentGroups].map((g) => (
             <option key={g.id} value={g.id}>
               {g.name}
             </option>
@@ -516,6 +597,7 @@ function TransactionsPage() {
         <span>{filtered.length} entries</span>
         <span className="text-success">Income {inr(totals.income)}</span>
         <span className="text-destructive">Expense {inr(totals.expense)}</span>
+        <span className="text-primary">Investments {inr(totals.investment)}</span>
       </div>
 
       <section className="card-surface mt-4 overflow-x-auto">
@@ -525,6 +607,7 @@ function TransactionsPage() {
               <th className="px-4 py-2.5 font-medium">Date</th>
               <th className="px-4 py-2.5 font-medium">Type</th>
               <th className="px-4 py-2.5 font-medium">Category</th>
+              <th className="px-4 py-2.5 font-medium">Tag</th>
               <th className="px-4 py-2.5 font-medium">Source</th>
               <th className="px-4 py-2.5 font-medium">User</th>
               <th className="px-4 py-2.5 font-medium">Remarks</th>
@@ -540,7 +623,11 @@ function TransactionsPage() {
                 <td className="px-4 py-3">
                   {nameOf(t.groupId)}
                   <span className="text-muted-foreground"> · {nameOf(t.subGroupId)}</span>
+                  {t.includesId && (
+                    <span className="text-muted-foreground"> · {nameOf(t.includesId)}</span>
+                  )}
                 </td>
+                <td className="px-4 py-3 capitalize text-muted-foreground">{t.necessity ?? "—"}</td>
                 <td className="px-4 py-3">{nameOf(t.paymentSourceId)}</td>
                 <td className="whitespace-nowrap px-4 py-3">{memberName(t)}</td>
                 <td className="max-w-[16rem] truncate px-4 py-3 text-muted-foreground">{t.remarks}</td>
@@ -575,7 +662,7 @@ function TransactionsPage() {
             ))}
             {filtered.length === 0 && (
               <tr>
-                <td colSpan={8} className="px-4 py-12 text-center text-muted-foreground">
+                <td colSpan={9} className="px-4 py-12 text-center text-muted-foreground">
                   No transactions match your filters.
                 </td>
               </tr>
@@ -600,15 +687,29 @@ function TransactionsPage() {
                 id="type"
                 className={selectClass}
                 {...form.register("type", {
-                  onChange: () => form.reset({ ...form.getValues(), groupId: "", subGroupId: "" }),
+                  onChange: () =>
+                    form.reset({
+                      ...form.getValues(),
+                      groupId: "",
+                      subGroupId: "",
+                      includesId: "",
+                      necessity: "",
+                    }),
                 })}
               >
                 <option value="expense">Expense</option>
                 <option value="income">Income</option>
+                <option value="investment">Investment</option>
               </select>
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="groupId">{type === "income" ? "Income group" : "Expense group"}</Label>
+              <Label htmlFor="groupId">
+                {type === "income"
+                  ? "Income group"
+                  : type === "investment"
+                    ? "Investment group"
+                    : "Expense group"}
+              </Label>
               <select id="groupId" className={selectClass} {...form.register("groupId", { required: true })}>
                 <option value="">Select…</option>
                 {groups.map((g) => (
@@ -620,7 +721,13 @@ function TransactionsPage() {
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="subGroupId">Sub group</Label>
-              <select id="subGroupId" className={selectClass} {...form.register("subGroupId")}>
+              <select
+                id="subGroupId"
+                className={selectClass}
+                {...form.register("subGroupId", {
+                  onChange: () => form.setValue("includesId", ""),
+                })}
+              >
                 <option value="">Select…</option>
                 {subGroups.map((s) => (
                   <option key={s.id} value={s.id}>
@@ -629,6 +736,29 @@ function TransactionsPage() {
                 ))}
               </select>
             </div>
+            {includesOptions.length > 0 && (
+              <div className="space-y-1.5">
+                <Label htmlFor="includesId">Includes</Label>
+                <select id="includesId" className={selectClass} {...form.register("includesId")}>
+                  <option value="">Select…</option>
+                  {includesOptions.map((i) => (
+                    <option key={i.id} value={i.id}>
+                      {i.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+            {showNecessity && (
+              <div className="space-y-1.5">
+                <Label htmlFor="necessity">Essential or discretionary</Label>
+                <select id="necessity" className={selectClass} {...form.register("necessity")}>
+                  <option value="">Not specified</option>
+                  <option value="essential">Essential</option>
+                  <option value="discretionary">Discretionary</option>
+                </select>
+              </div>
+            )}
             <div className="space-y-1.5">
               <Label htmlFor="paymentSourceId">Payment source</Label>
               <select

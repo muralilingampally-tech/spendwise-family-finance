@@ -50,9 +50,23 @@ function MastersPage() {
   const [kind, setKind] = useState<string>(PAYMENT_SOURCE_KINDS[0]);
   const [search, setSearch] = useState("");
 
-  const isSub = collection === "expenseSubGroups" || collection === "incomeSubGroups";
+  const isSub =
+    collection === "expenseSubGroups" ||
+    collection === "incomeSubGroups" ||
+    collection === "investmentSubGroups" ||
+    collection === "expenseIncludes";
   const isSource = collection === "paymentSources";
-  const parents = collection === "expenseSubGroups" ? masters.expenseGroups : masters.incomeGroups;
+  const parents =
+    collection === "expenseSubGroups"
+      ? masters.expenseGroups
+      : collection === "incomeSubGroups"
+        ? masters.incomeGroups
+        : collection === "investmentSubGroups"
+          ? masters.investmentGroups
+          : collection === "expenseIncludes"
+            ? masters.expenseSubGroups
+            : masters.incomeGroups;
+  const parentLabel = collection === "expenseIncludes" ? "Sub group" : "Parent group";
 
   const parentName = useMemo(() => {
     const map = new Map(parents.map((p) => [p.id, p.name]));
@@ -146,7 +160,7 @@ function MastersPage() {
           <thead className="bg-muted/60 text-left text-xs uppercase tracking-wide text-muted-foreground">
             <tr>
               <th className="px-4 py-2.5 font-medium">Name</th>
-              {isSub && <th className="px-4 py-2.5 font-medium">Parent group</th>}
+              {isSub && <th className="px-4 py-2.5 font-medium">{parentLabel}</th>}
               {isSource && <th className="px-4 py-2.5 font-medium">Type</th>}
               <th className="px-4 py-2.5" />
             </tr>
@@ -212,7 +226,7 @@ function MastersPage() {
             </div>
             {isSub && (
               <div className="space-y-1.5">
-                <Label htmlFor="master-parent">Parent group</Label>
+                <Label htmlFor="master-parent">{parentLabel}</Label>
                 <select
                   id="master-parent"
                   className={selectClass}
