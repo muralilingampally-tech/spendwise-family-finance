@@ -62,12 +62,13 @@ function Dashboard() {
       const name = memberName(t);
       const row = map.get(name) ?? { name, Income: 0, Expense: 0, Investment: 0 };
       if (t.type === "income") row.Income += Number(t.amount);
-      else if (t.type === "investment") row.Investment += Number(t.amount);
+      else if (t.type === "investment")
+        row.Investment += signedInvestment(nameOf(t.subGroupId), Number(t.amount));
       else row.Expense += Number(t.amount);
       map.set(name, row);
     });
     return [...map.values()].sort((a, b) => b.Income + b.Expense - (a.Income + a.Expense));
-  }, [transactions, memberName]);
+  }, [transactions, memberName, nameOf]);
 
   const totals = useMemo(() => {
     let income = 0;
@@ -75,11 +76,12 @@ function Dashboard() {
     let investment = 0;
     transactions.forEach((t) => {
       if (t.type === "income") income += Number(t.amount);
-      else if (t.type === "investment") investment += Number(t.amount);
+      else if (t.type === "investment")
+        investment += signedInvestment(nameOf(t.subGroupId), Number(t.amount));
       else expense += Number(t.amount);
     });
     return { income, expense, investment, balance: income - expense };
-  }, [transactions]);
+  }, [transactions, nameOf]);
 
   const monthly = useMemo(() => {
     const map = new Map<string, { month: string; Income: number; Expense: number }>();
@@ -135,7 +137,7 @@ function Dashboard() {
           breakdown={byUser.map((r) => ({ name: r.name, value: r.Expense }))}
         />
         <StatCard
-          label="Investments"
+          label="Investments (net)"
           value={totals.investment}
           icon={PiggyBank}
           tone="primary"
