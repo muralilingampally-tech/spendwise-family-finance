@@ -17,6 +17,7 @@ import { ArrowDownRight, ArrowUpRight, PiggyBank, Scale } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
 import { Button } from "@/components/ui/button";
 import { useApp } from "@/lib/store";
+import { signedInvestment } from "@/lib/investment";
 import { inr, monthKey, monthLabel, shortDate } from "@/lib/format";
 
 export const Route = createFileRoute("/")({
