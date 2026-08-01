@@ -187,13 +187,19 @@ function TransactionsPage() {
   }, [members, transactions, user]);
 
   const allGroupNames = useMemo(
-    () => [...masters.expenseGroups, ...masters.incomeGroups].map((g) => g.name),
-    [masters.expenseGroups, masters.incomeGroups],
+    () =>
+      [...masters.expenseGroups, ...masters.incomeGroups, ...masters.investmentGroups].map(
+        (g) => g.name,
+      ),
+    [masters.expenseGroups, masters.incomeGroups, masters.investmentGroups],
   );
 
   const allSubGroupNames = useMemo(
-    () => masters.expenseSubGroups.concat(masters.incomeSubGroups).map((g) => g.name),
-    [masters.expenseSubGroups, masters.incomeSubGroups],
+    () =>
+      masters.expenseSubGroups
+        .concat(masters.incomeSubGroups, masters.investmentSubGroups)
+        .map((g) => g.name),
+    [masters.expenseSubGroups, masters.incomeSubGroups, masters.investmentSubGroups],
   );
 
   const allPaymentSourceNames = useMemo(
@@ -234,10 +240,13 @@ function TransactionsPage() {
   const totals = useMemo(() => {
     let income = 0;
     let expense = 0;
-    filtered.forEach((t) =>
-      t.type === "income" ? (income += Number(t.amount)) : (expense += Number(t.amount)),
-    );
-    return { income, expense };
+    let investment = 0;
+    filtered.forEach((t) => {
+      if (t.type === "income") income += Number(t.amount);
+      else if (t.type === "investment") investment += Number(t.amount);
+      else expense += Number(t.amount);
+    });
+    return { income, expense, investment };
   }, [filtered]);
 
   const openNew = () => {
@@ -253,6 +262,8 @@ function TransactionsPage() {
       type: t.type,
       groupId: t.groupId,
       subGroupId: t.subGroupId ?? "",
+      includesId: t.includesId ?? "",
+      necessity: t.necessity ?? "",
       paymentSourceId: t.paymentSourceId,
       amount: String(t.amount),
       remarks: t.remarks ?? "",
@@ -276,6 +287,8 @@ function TransactionsPage() {
           type: values.type,
           groupId: values.groupId,
           subGroupId: values.subGroupId || null,
+          includesId: values.type === "expense" ? values.includesId || null : null,
+          necessity: values.type === "expense" ? (values.necessity || null) : null,
           paymentSourceId: values.paymentSourceId,
           amount,
           remarks: values.remarks.trim().slice(0, 500),
