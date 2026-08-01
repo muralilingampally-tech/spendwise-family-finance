@@ -44,7 +44,7 @@ export const Route = createFileRoute("/reports")({
 });
 
 type Preset = "month" | "lastMonth" | "year" | "lastYear" | "all" | "custom";
-type Dimension = "group" | "subGroup" | "source" | "month" | "user";
+type Dimension = "group" | "subGroup" | "includes" | "source" | "month" | "user" | "necessity";
 
 const PIE_COLORS = [
   "var(--chart-1)",
@@ -139,26 +139,34 @@ function ReportsPage() {
   const totals = useMemo(() => {
     let income = 0;
     let expense = 0;
-    rows.forEach((t) =>
-      t.type === "income" ? (income += Number(t.amount)) : (expense += Number(t.amount)),
-    );
-    return { income, expense, balance: income - expense, count: rows.length };
+    let investment = 0;
+    rows.forEach((t) => {
+      if (t.type === "income") income += Number(t.amount);
+      else if (t.type === "investment") investment += Number(t.amount);
+      else expense += Number(t.amount);
+    });
+    return { income, expense, investment, balance: income - expense, count: rows.length };
   }, [rows]);
 
   const keyFor = (t: (typeof rows)[number]) => {
     if (dimension === "group") return nameOf(t.groupId);
     if (dimension === "subGroup") return `${nameOf(t.groupId)} › ${nameOf(t.subGroupId)}`;
+    if (dimension === "includes")
+      return t.includesId ? `${nameOf(t.subGroupId)} › ${nameOf(t.includesId)}` : "Not specified";
+    if (dimension === "necessity")
+      return t.necessity ? t.necessity[0].toUpperCase() + t.necessity.slice(1) : "Not tagged";
     if (dimension === "source") return nameOf(t.paymentSourceId);
     if (dimension === "user") return memberName(t);
     return monthKey(t.date);
   };
 
   const breakdown = useMemo(() => {
-    const map = new Map<string, { label: string; Income: number; Expense: number }>();
+    const map = new Map<string, { label: string; Income: number; Expense: number; Investment: number }>();
     rows.forEach((t) => {
       const k = keyFor(t);
-      const row = map.get(k) ?? { label: k, Income: 0, Expense: 0 };
+      const row = map.get(k) ?? { label: k, Income: 0, Expense: 0, Investment: 0 };
       if (t.type === "income") row.Income += Number(t.amount);
+      else if (t.type === "investment") row.Investment += Number(t.amount);
       else row.Expense += Number(t.amount);
       map.set(k, row);
     });
@@ -179,21 +187,30 @@ function ReportsPage() {
         label: string;
         income: number;
         expense: number;
+        investment: number;
         count: number;
-        subs: Map<string, { label: string; income: number; expense: number; count: number }>;
+        subs: Map<
+          string,
+          { label: string; income: number; expense: number; investment: number; count: number }
+        >;
       }
     >();
     rows.forEach((t) => {
       const gid = t.groupId || "none";
       const group =
         map.get(gid) ??
-        { id: gid, label: nameOf(t.groupId), income: 0, expense: 0, count: 0, subs: new Map() };
+        { id: gid, label: nameOf(t.groupId), income: 0, expense: 0, investment: 0, count: 0, subs: new Map() };
       const sid = t.subGroupId || "none";
-      const sub = group.subs.get(sid) ?? { label: nameOf(t.subGroupId), income: 0, expense: 0, count: 0 };
+      const sub =
+        group.subs.get(sid) ??
+        { label: nameOf(t.subGroupId), income: 0, expense: 0, investment: 0, count: 0 };
       const amount = Number(t.amount);
       if (t.type === "income") {
         group.income += amount;
         sub.income += amount;
+      } else if (t.type === "investment") {
+        group.investment += amount;
+        sub.investment += amount;
       } else {
         group.expense += amount;
         sub.expense += amount;
@@ -225,6 +242,7 @@ function ReportsPage() {
   const trend = useMemo(() => {
     const map = new Map<string, { key: string; Income: number; Expense: number }>();
     rows.forEach((t) => {
+      if (t.type === "investment") return;
       const k = monthKey(t.date);
       const row = map.get(k) ?? { key: k, Income: 0, Expense: 0 };
       if (t.type === "income") row.Income += Number(t.amount);
