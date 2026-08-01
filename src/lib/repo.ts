@@ -1,13 +1,16 @@
 import { getFirestoreDb, isFirebaseConfigured } from "./firebase";
 import { normalizeDate } from "./format";
-import { buildSeedRows } from "./seed";
+import { SEED_VERSION, buildSeedRows } from "./seed";
 import type { Budget, MasterCollection, MasterItem, Member, Transaction } from "./types";
 
 export const MASTER_COLLECTIONS: MasterCollection[] = [
   "expenseGroups",
   "expenseSubGroups",
+  "expenseIncludes",
   "incomeGroups",
   "incomeSubGroups",
+  "investmentGroups",
+  "investmentSubGroups",
   "paymentSources",
 ];
 
