@@ -551,7 +551,7 @@ function ReportsPage() {
                 <th className="px-3 py-2.5 text-right font-medium">Entries</th>
                 <th className="px-3 py-2.5 text-right font-medium">Income</th>
                 <th className="px-3 py-2.5 text-right font-medium">Expense</th>
-                <th className="px-3 py-2.5 text-right font-medium">Invested</th>
+                <th className="px-3 py-2.5 text-right font-medium">Investment net</th>
                 <th className="px-3 py-2.5 text-right font-medium">Net</th>
                 <th className="px-5 py-2.5 text-right font-medium">% of expense</th>
               </tr>
@@ -574,7 +574,9 @@ function ReportsPage() {
                     <td className="num px-3 py-3 text-right text-muted-foreground">{g.count}</td>
                     <td className="num px-3 py-3 text-right text-success">{inr(g.income)}</td>
                     <td className="num px-3 py-3 text-right text-destructive">{inr(g.expense)}</td>
-                    <td className="num px-3 py-3 text-right">{inr(g.investment)}</td>
+                    <td className={`num px-3 py-3 text-right ${g.investment < 0 ? "text-destructive" : g.investment > 0 ? "text-success" : ""}`}>
+                      {inr(g.investment)}
+                    </td>
                     <td className="num px-3 py-3 text-right font-medium">{inr(g.income - g.expense)}</td>
                     <td className="num px-5 py-3 text-right text-muted-foreground">
                       {totals.expense > 0 ? `${((g.expense / totals.expense) * 100).toFixed(1)}%` : "—"}
@@ -587,7 +589,9 @@ function ReportsPage() {
                         <td className="num px-3 py-2.5 text-right text-muted-foreground">{s.count}</td>
                         <td className="num px-3 py-2.5 text-right">{inr(s.income)}</td>
                         <td className="num px-3 py-2.5 text-right">{inr(s.expense)}</td>
-                        <td className="num px-3 py-2.5 text-right">{inr(s.investment)}</td>
+                        <td className={`num px-3 py-2.5 text-right ${s.investment < 0 ? "text-destructive" : s.investment > 0 ? "text-success" : ""}`}>
+                          {inr(s.investment)}
+                        </td>
                         <td className="num px-3 py-2.5 text-right">{inr(s.income - s.expense)}</td>
                         <td className="num px-5 py-2.5 text-right text-muted-foreground">
                           {totals.expense > 0 ? `${((s.expense / totals.expense) * 100).toFixed(1)}%` : "—"}
@@ -640,7 +644,7 @@ function ReportsPage() {
                 </th>
                 <th className="px-5 py-2.5 text-right font-medium">Income</th>
                 <th className="px-5 py-2.5 text-right font-medium">Expense</th>
-                <th className="px-5 py-2.5 text-right font-medium">Invested</th>
+                <th className="px-5 py-2.5 text-right font-medium">Investment net</th>
                 <th className="px-5 py-2.5 text-right font-medium">Net</th>
               </tr>
             </thead>
@@ -650,7 +654,9 @@ function ReportsPage() {
                   <td className="px-5 py-3">{r.label}</td>
                   <td className="num px-5 py-3 text-right text-success">{inr(r.Income)}</td>
                   <td className="num px-5 py-3 text-right text-destructive">{inr(r.Expense)}</td>
-                  <td className="num px-5 py-3 text-right">{inr(r.Investment)}</td>
+                  <td className={`num px-5 py-3 text-right ${r.Investment < 0 ? "text-destructive" : r.Investment > 0 ? "text-success" : ""}`}>
+                    {inr(r.Investment)}
+                  </td>
                   <td className="num px-5 py-3 text-right font-medium">{inr(r.Income - r.Expense)}</td>
                 </tr>
               ))}
