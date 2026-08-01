@@ -15,6 +15,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useApp } from "@/lib/store";
+import { signedInvestment } from "@/lib/investment";
 import { inr, normalizeDate, shortDate, todayISO } from "@/lib/format";
 import { NECESSITY_GROUPS } from "@/lib/seed";
 import type { Necessity, Transaction, TransactionType } from "@/lib/types";
