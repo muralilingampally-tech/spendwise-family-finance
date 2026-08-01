@@ -50,9 +50,23 @@ function MastersPage() {
   const [kind, setKind] = useState<string>(PAYMENT_SOURCE_KINDS[0]);
   const [search, setSearch] = useState("");
 
-  const isSub = collection === "expenseSubGroups" || collection === "incomeSubGroups";
+  const isSub =
+    collection === "expenseSubGroups" ||
+    collection === "incomeSubGroups" ||
+    collection === "investmentSubGroups" ||
+    collection === "expenseIncludes";
   const isSource = collection === "paymentSources";
-  const parents = collection === "expenseSubGroups" ? masters.expenseGroups : masters.incomeGroups;
+  const parents =
+    collection === "expenseSubGroups"
+      ? masters.expenseGroups
+      : collection === "incomeSubGroups"
+        ? masters.incomeGroups
+        : collection === "investmentSubGroups"
+          ? masters.investmentGroups
+          : collection === "expenseIncludes"
+            ? masters.expenseSubGroups
+            : masters.incomeGroups;
+  const parentLabel = collection === "expenseIncludes" ? "Sub group" : "Parent group";
 
   const parentName = useMemo(() => {
     const map = new Map(parents.map((p) => [p.id, p.name]));
