@@ -255,12 +255,25 @@ function ReportsPage() {
   }, [rows]);
 
   const exportCsv = () => {
-    const head = ["Date", "Type", "Group", "Sub group", "Payment source", "User", "Amount", "Remarks"];
+    const head = [
+      "Date",
+      "Type",
+      "Group",
+      "Sub group",
+      "Includes",
+      "Necessity",
+      "Payment source",
+      "User",
+      "Amount",
+      "Remarks",
+    ];
     const body = rows.map((t) => [
       t.date,
       t.type,
       nameOf(t.groupId),
       nameOf(t.subGroupId),
+      t.includesId ? nameOf(t.includesId) : "",
+      t.necessity ?? "",
       nameOf(t.paymentSourceId),
       memberName(t),
       String(t.amount),
@@ -335,9 +348,10 @@ function ReportsPage() {
               value={type}
               onChange={(e) => setType(e.target.value as typeof type)}
             >
-              <option value="all">Income &amp; expense</option>
+              <option value="all">All entries</option>
               <option value="expense">Expense only</option>
               <option value="income">Income only</option>
+              <option value="investment">Investments only</option>
             </select>
           </div>
           <div className="space-y-1.5">
@@ -350,6 +364,8 @@ function ReportsPage() {
             >
               <option value="group">Group</option>
               <option value="subGroup">Sub group</option>
+              <option value="includes">Includes</option>
+              <option value="necessity">Essential / discretionary</option>
               <option value="source">Payment source</option>
               <option value="month">Month</option>
               <option value="user">User</option>
@@ -390,9 +406,10 @@ function ReportsPage() {
         </div>
       </section>
 
-      <div className="mt-4 grid gap-4 sm:grid-cols-4">
+      <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
         <Stat label="Income" value={inr(totals.income)} tone="text-success" />
         <Stat label="Expense" value={inr(totals.expense)} tone="text-destructive" />
+        <Stat label="Investments" value={inr(totals.investment)} tone="text-primary" />
         <Stat label="Balance" value={inr(totals.balance)} tone="text-primary" />
         <Stat label="Entries" value={String(totals.count)} tone="" />
       </div>
