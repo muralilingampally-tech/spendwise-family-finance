@@ -502,6 +502,7 @@ function TransactionsPage() {
           <option value="all">All types</option>
           <option value="income">Income</option>
           <option value="expense">Expense</option>
+          <option value="investment">Investment</option>
         </select>
         <select
           className={selectClass}
@@ -509,7 +510,7 @@ function TransactionsPage() {
           onChange={(e) => setGroupFilter(e.target.value)}
         >
           <option value="">All categories</option>
-          {[...masters.expenseGroups, ...masters.incomeGroups].map((g) => (
+          {[...masters.expenseGroups, ...masters.incomeGroups, ...masters.investmentGroups].map((g) => (
             <option key={g.id} value={g.id}>
               {g.name}
             </option>
@@ -549,6 +550,7 @@ function TransactionsPage() {
         <span>{filtered.length} entries</span>
         <span className="text-success">Income {inr(totals.income)}</span>
         <span className="text-destructive">Expense {inr(totals.expense)}</span>
+        <span className="text-primary">Investments {inr(totals.investment)}</span>
       </div>
 
       <section className="card-surface mt-4 overflow-x-auto">
@@ -558,6 +560,7 @@ function TransactionsPage() {
               <th className="px-4 py-2.5 font-medium">Date</th>
               <th className="px-4 py-2.5 font-medium">Type</th>
               <th className="px-4 py-2.5 font-medium">Category</th>
+              <th className="px-4 py-2.5 font-medium">Tag</th>
               <th className="px-4 py-2.5 font-medium">Source</th>
               <th className="px-4 py-2.5 font-medium">User</th>
               <th className="px-4 py-2.5 font-medium">Remarks</th>
@@ -573,7 +576,11 @@ function TransactionsPage() {
                 <td className="px-4 py-3">
                   {nameOf(t.groupId)}
                   <span className="text-muted-foreground"> · {nameOf(t.subGroupId)}</span>
+                  {t.includesId && (
+                    <span className="text-muted-foreground"> · {nameOf(t.includesId)}</span>
+                  )}
                 </td>
+                <td className="px-4 py-3 capitalize text-muted-foreground">{t.necessity ?? "—"}</td>
                 <td className="px-4 py-3">{nameOf(t.paymentSourceId)}</td>
                 <td className="whitespace-nowrap px-4 py-3">{memberName(t)}</td>
                 <td className="max-w-[16rem] truncate px-4 py-3 text-muted-foreground">{t.remarks}</td>
@@ -608,7 +615,7 @@ function TransactionsPage() {
             ))}
             {filtered.length === 0 && (
               <tr>
-                <td colSpan={8} className="px-4 py-12 text-center text-muted-foreground">
+                <td colSpan={9} className="px-4 py-12 text-center text-muted-foreground">
                   No transactions match your filters.
                 </td>
               </tr>
