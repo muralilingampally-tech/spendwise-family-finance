@@ -154,7 +154,12 @@ async function wipeCollection(familyId: string, collection: string) {
 export async function seedFamilyMasters(familyId: string) {
   const version = await readSeedVersion(familyId);
   const existing = await repo.list(familyId, "expenseGroups");
-  if (version >= SEED_VERSION && existing.length > 0) return;
+  if (version >= SEED_VERSION && existing.length > 0) {
+    // Structure is current: only add seed rows introduced since the last run,
+    // without touching existing masters or entries.
+    await topUpSeedMasters(familyId);
+    return;
+  }
 
   if (version < SEED_VERSION) {
     for (const c of [...MASTER_COLLECTIONS, "transactions", "budgets"]) {
@@ -183,6 +188,50 @@ export async function seedFamilyMasters(familyId: string) {
   }
 
   await writeSeedVersion(familyId, SEED_VERSION);
+}
+
+/** Creates any seed master rows that are missing, matching on name + parent. */
+async function topUpSeedMasters(familyId: string) {
+  const cache = new Map<string, MasterItem[]>();
+  const list = async (collection: string) => {
+    if (!cache.has(collection)) {
+      cache.set(collection, (await repo.list(familyId, collection)) as unknown as MasterItem[]);
+    }
+    return cache.get(collection)!;
+  };
+
+  for (const row of buildSeedRows()) {
+    const rows = await list(row.collection);
+    let parentId: string | null = null;
+
+    if (row.parentKey) {
+      const [, parentName] = row.parentKey.split(":");
+      const parentCollection =
+        row.collection === "expenseSubGroups"
+          ? "expenseGroups"
+          : row.collection === "incomeSubGroups"
+            ? "incomeGroups"
+            : row.collection === "investmentSubGroups"
+              ? "investmentGroups"
+              : "expenseSubGroups";
+      const lookupName =
+        row.collection === "expenseIncludes" ? (parentName.split(" › ")[1] ?? parentName) : parentName;
+      parentId = (await list(parentCollection)).find((p) => p.name === lookupName)?.id ?? null;
+      if (!parentId) continue;
+    }
+
+    if (rows.some((r) => r.name === row.name && (r.parentId ?? null) === parentId)) continue;
+
+    const created = (await repo.create(familyId, row.collection, {
+      name: row.name,
+      parentId,
+      kind: row.kind ?? null,
+      active: true,
+      createdAt: now(),
+      updatedAt: now(),
+    })) as unknown as MasterItem;
+    rows.push(created);
+  }
 }
 /** Registers the signed-in user as a member of the family (needed by Firestore rules). */
 export async function ensureMembership(uid: string, familyId: string, profile: Record<string, unknown>) {

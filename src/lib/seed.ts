@@ -46,6 +46,10 @@ export const SEED_EXPENSE_TREE: Record<string, Record<string, string[]>> = {
     Mutton: [],
     Other: [],
   },
+  Clothing: {
+    Murali: [],
+    Rajeshwari: [],
+  },
   Healthcare: {
     Medicines: [],
     "Lab Investigations": [],
