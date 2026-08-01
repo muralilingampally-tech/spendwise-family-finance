@@ -22,6 +22,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useApp } from "@/lib/store";
 import { inr, monthKey, monthLabel, todayISO, toLocalISODate } from "@/lib/format";
+import { signedInvestment } from "@/lib/investment";
 import type { TransactionType } from "@/lib/types";
 
 export const Route = createFileRoute("/reports")({
@@ -139,14 +140,27 @@ function ReportsPage() {
   const totals = useMemo(() => {
     let income = 0;
     let expense = 0;
-    let investment = 0;
+    let invested = 0;
+    let realized = 0;
     rows.forEach((t) => {
       if (t.type === "income") income += Number(t.amount);
-      else if (t.type === "investment") investment += Number(t.amount);
+      else if (t.type === "investment") {
+        const signed = signedInvestment(nameOf(t.subGroupId), Number(t.amount));
+        if (signed >= 0) realized += signed;
+        else invested += -signed;
+      }
       else expense += Number(t.amount);
     });
-    return { income, expense, investment, balance: income - expense, count: rows.length };
-  }, [rows]);
+    return {
+      income,
+      expense,
+      invested,
+      realized,
+      investment: realized - invested,
+      balance: income - expense,
+      count: rows.length,
+    };
+  }, [rows, nameOf]);
 
   const keyFor = (t: (typeof rows)[number]) => {
     if (dimension === "group") return nameOf(t.groupId);
@@ -166,7 +180,8 @@ function ReportsPage() {
       const k = keyFor(t);
       const row = map.get(k) ?? { label: k, Income: 0, Expense: 0, Investment: 0 };
       if (t.type === "income") row.Income += Number(t.amount);
-      else if (t.type === "investment") row.Investment += Number(t.amount);
+      else if (t.type === "investment")
+        row.Investment += signedInvestment(nameOf(t.subGroupId), Number(t.amount));
       else row.Expense += Number(t.amount);
       map.set(k, row);
     });
@@ -209,8 +224,9 @@ function ReportsPage() {
         group.income += amount;
         sub.income += amount;
       } else if (t.type === "investment") {
-        group.investment += amount;
-        sub.investment += amount;
+        const signed = signedInvestment(nameOf(t.subGroupId), amount);
+        group.investment += signed;
+        sub.investment += signed;
       } else {
         group.expense += amount;
         sub.expense += amount;
@@ -240,19 +256,20 @@ function ReportsPage() {
   );
 
   const trend = useMemo(() => {
-    const map = new Map<string, { key: string; Income: number; Expense: number }>();
+    const map = new Map<string, { key: string; Income: number; Expense: number; Investment: number }>();
     rows.forEach((t) => {
-      if (t.type === "investment") return;
       const k = monthKey(t.date);
-      const row = map.get(k) ?? { key: k, Income: 0, Expense: 0 };
-      if (t.type === "income") row.Income += Number(t.amount);
+      const row = map.get(k) ?? { key: k, Income: 0, Expense: 0, Investment: 0 };
+      if (t.type === "investment")
+        row.Investment += signedInvestment(nameOf(t.subGroupId), Number(t.amount));
+      else if (t.type === "income") row.Income += Number(t.amount);
       else row.Expense += Number(t.amount);
       map.set(k, row);
     });
     return [...map.values()]
       .sort((a, b) => a.key.localeCompare(b.key))
       .map((r) => ({ ...r, label: monthLabel(r.key), Net: r.Income - r.Expense }));
-  }, [rows]);
+  }, [rows, nameOf]);
 
   const exportCsv = () => {
     const head = [
