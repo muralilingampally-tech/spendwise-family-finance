@@ -39,7 +39,13 @@ export const Route = createFileRoute("/")({
 });
 
 function Dashboard() {
-  const { transactions, masters, members, user } = useApp();
+  const { transactions: allTransactions, masters, members, user } = useApp();
+
+  const currentMonth = useMemo(() => monthKey(new Date().toISOString()), []);
+  const transactions = useMemo(
+    () => allTransactions.filter((t) => monthKey(t.date) === currentMonth),
+    [allTransactions, currentMonth],
+  );
 
   const nameOf = useMemo(() => {
     const map = new Map<string, string>();
@@ -86,7 +92,7 @@ function Dashboard() {
 
   const monthly = useMemo(() => {
     const map = new Map<string, { month: string; Income: number; Expense: number }>();
-    transactions.forEach((t) => {
+    allTransactions.forEach((t) => {
       if (t.type === "investment") return;
       const k = monthKey(t.date);
       const row = map.get(k) ?? { month: k, Income: 0, Expense: 0 };
@@ -98,7 +104,7 @@ function Dashboard() {
       .sort((a, b) => a.month.localeCompare(b.month))
       .slice(-6)
       .map((r) => ({ ...r, month: monthLabel(r.month) }));
-  }, [transactions]);
+  }, [allTransactions]);
 
   const byCategory = useMemo(() => {
     const map = new Map<string, number>();
@@ -115,13 +121,20 @@ function Dashboard() {
 
   return (
     <AppShell
-      title="Dashboard"
+      title={`Dashboard — ${monthLabel(currentMonth)}`}
       actions={
         <Button asChild size="sm">
           <Link to="/transactions">Add transaction</Link>
         </Button>
       }
     >
+      <p className="mb-4 text-sm text-muted-foreground">
+        Showing {monthLabel(currentMonth)} only. For other months or custom ranges, use{" "}
+        <Link to="/reports" className="text-primary hover:underline">
+          Reports
+        </Link>
+        .
+      </p>
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard
           label="Total Income"
@@ -149,7 +162,7 @@ function Dashboard() {
 
       <div className="mt-6 grid gap-4 lg:grid-cols-5">
         <section className="card-surface p-5 lg:col-span-3">
-          <h2 className="text-sm font-semibold">Monthly income vs expense</h2>
+          <h2 className="text-sm font-semibold">Monthly income vs expense (last 6 months)</h2>
           <div className="mt-4 h-72">
             {monthly.length === 0 ? (
               <Empty />
@@ -177,7 +190,7 @@ function Dashboard() {
         </section>
 
         <section className="card-surface p-5 lg:col-span-2">
-          <h2 className="text-sm font-semibold">Expense by category</h2>
+          <h2 className="text-sm font-semibold">Expense by category (this month)</h2>
           <div className="mt-4 h-72">
             {byCategory.length === 0 ? (
               <Empty />
@@ -207,7 +220,7 @@ function Dashboard() {
 
       <section className="card-surface mt-6 overflow-hidden">
         <div className="flex items-center justify-between px-5 py-4">
-          <h2 className="text-sm font-semibold">By user</h2>
+          <h2 className="text-sm font-semibold">By user (this month)</h2>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -255,7 +268,7 @@ function Dashboard() {
 
       <section className="card-surface mt-6 overflow-hidden">
         <div className="flex items-center justify-between px-5 py-4">
-          <h2 className="text-sm font-semibold">Recent transactions</h2>
+          <h2 className="text-sm font-semibold">Recent transactions (this month)</h2>
           <Link to="/transactions" className="text-sm text-primary hover:underline">
             View all
           </Link>
