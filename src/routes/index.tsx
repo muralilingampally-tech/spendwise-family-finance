@@ -39,7 +39,13 @@ export const Route = createFileRoute("/")({
 });
 
 function Dashboard() {
-  const { transactions, masters, members, user } = useApp();
+  const { transactions: allTransactions, masters, members, user } = useApp();
+
+  const currentMonth = useMemo(() => monthKey(new Date().toISOString()), []);
+  const transactions = useMemo(
+    () => allTransactions.filter((t) => monthKey(t.date) === currentMonth),
+    [allTransactions, currentMonth],
+  );
 
   const nameOf = useMemo(() => {
     const map = new Map<string, string>();
@@ -86,7 +92,7 @@ function Dashboard() {
 
   const monthly = useMemo(() => {
     const map = new Map<string, { month: string; Income: number; Expense: number }>();
-    transactions.forEach((t) => {
+    allTransactions.forEach((t) => {
       if (t.type === "investment") return;
       const k = monthKey(t.date);
       const row = map.get(k) ?? { month: k, Income: 0, Expense: 0 };
@@ -98,7 +104,7 @@ function Dashboard() {
       .sort((a, b) => a.month.localeCompare(b.month))
       .slice(-6)
       .map((r) => ({ ...r, month: monthLabel(r.month) }));
-  }, [transactions]);
+  }, [allTransactions]);
 
   const byCategory = useMemo(() => {
     const map = new Map<string, number>();
