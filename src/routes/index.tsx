@@ -186,32 +186,31 @@ function Dashboard() {
         </section>
 
         <section className="card-surface p-5 lg:col-span-2">
-          <h2 className="text-sm font-semibold">Expense by category (this month)</h2>
-          <div className="mt-4 h-72">
+          <h2 className="text-sm font-semibold">Expense by group (this month)</h2>
+          <div className="mt-4 h-72 overflow-auto">
             {byCategory.length === 0 ? (
               <Empty />
             ) : (
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie data={byCategory} dataKey="value" nameKey="name" innerRadius={55} outerRadius={90} paddingAngle={2}>
-                    {byCategory.map((_, i) => (
-                      <Cell key={i} fill={chartColors[i % chartColors.length]} />
-                    ))}
-                  </Pie>
-                  <Tooltip
-                    formatter={(v: number) => inr(v)}
-                    contentStyle={{
-                      background: "var(--popover)",
-                      border: "1px solid var(--border)",
-                      borderRadius: 12,
-                    }}
-                  />
-                  <Legend />
-                </PieChart>
-              </ResponsiveContainer>
+              <table className="w-full text-sm">
+                <thead className="sticky top-0 bg-muted/60 text-left text-xs uppercase tracking-wide text-muted-foreground">
+                  <tr>
+                    <th className="px-3 py-2 font-medium">Group</th>
+                    <th className="px-3 py-2 text-right font-medium">Amount</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {byCategory.map((c) => (
+                    <tr key={c.name} className="border-t border-border">
+                      <td className="px-3 py-2.5">{c.name}</td>
+                      <td className="num px-3 py-2.5 text-right font-medium">{inr(c.value)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             )}
           </div>
         </section>
+
       </div>
 
       <section className="card-surface mt-6 overflow-hidden">
