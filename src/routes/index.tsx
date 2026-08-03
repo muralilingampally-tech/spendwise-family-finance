@@ -162,7 +162,7 @@ function Dashboard() {
 
       <div className="mt-6 grid gap-4 lg:grid-cols-5">
         <section className="card-surface p-5 lg:col-span-3">
-          <h2 className="text-sm font-semibold">Monthly income vs expense</h2>
+          <h2 className="text-sm font-semibold">Monthly income vs expense (last 6 months)</h2>
           <div className="mt-4 h-72">
             {monthly.length === 0 ? (
               <Empty />
@@ -190,7 +190,7 @@ function Dashboard() {
         </section>
 
         <section className="card-surface p-5 lg:col-span-2">
-          <h2 className="text-sm font-semibold">Expense by category</h2>
+          <h2 className="text-sm font-semibold">Expense by category (this month)</h2>
           <div className="mt-4 h-72">
             {byCategory.length === 0 ? (
               <Empty />
@@ -220,7 +220,7 @@ function Dashboard() {
 
       <section className="card-surface mt-6 overflow-hidden">
         <div className="flex items-center justify-between px-5 py-4">
-          <h2 className="text-sm font-semibold">By user</h2>
+          <h2 className="text-sm font-semibold">By user (this month)</h2>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -268,7 +268,7 @@ function Dashboard() {
 
       <section className="card-surface mt-6 overflow-hidden">
         <div className="flex items-center justify-between px-5 py-4">
-          <h2 className="text-sm font-semibold">Recent transactions</h2>
+          <h2 className="text-sm font-semibold">Recent transactions (this month)</h2>
           <Link to="/transactions" className="text-sm text-primary hover:underline">
             View all
           </Link>
