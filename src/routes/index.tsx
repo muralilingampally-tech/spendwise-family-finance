@@ -4,10 +4,7 @@ import {
   Bar,
   BarChart,
   CartesianGrid,
-  Cell,
   Legend,
-  Pie,
-  PieChart,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -19,6 +16,7 @@ import { Button } from "@/components/ui/button";
 import { useApp } from "@/lib/store";
 import { signedInvestment } from "@/lib/investment";
 import { inr, monthKey, monthLabel, shortDate } from "@/lib/format";
+
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -116,8 +114,6 @@ function Dashboard() {
       .sort((a, b) => b.value - a.value)
       .slice(0, 6);
   }, [transactions, nameOf]);
-
-  const chartColors = ["var(--chart-1)", "var(--chart-2)", "var(--chart-3)", "var(--chart-4)", "var(--chart-5)", "var(--muted-foreground)"];
 
   return (
     <AppShell
