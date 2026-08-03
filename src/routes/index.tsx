@@ -121,13 +121,20 @@ function Dashboard() {
 
   return (
     <AppShell
-      title="Dashboard"
+      title={`Dashboard — ${monthLabel(currentMonth)}`}
       actions={
         <Button asChild size="sm">
           <Link to="/transactions">Add transaction</Link>
         </Button>
       }
     >
+      <p className="mb-4 text-sm text-muted-foreground">
+        Showing {monthLabel(currentMonth)} only. For other months or custom ranges, use{" "}
+        <Link to="/reports" className="text-primary hover:underline">
+          Reports
+        </Link>
+        .
+      </p>
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard
           label="Total Income"
