@@ -111,8 +111,7 @@ function Dashboard() {
       .forEach((t) => map.set(t.groupId, (map.get(t.groupId) ?? 0) + Number(t.amount)));
     return [...map.entries()]
       .map(([id, value]) => ({ name: nameOf(id), value }))
-      .sort((a, b) => b.value - a.value)
-      .slice(0, 6);
+      .sort((a, b) => b.value - a.value);
   }, [transactions, nameOf]);
 
   return (
@@ -206,6 +205,12 @@ function Dashboard() {
                     </tr>
                   ))}
                 </tbody>
+                <tfoot>
+                  <tr className="border-t border-border bg-muted/40 font-semibold">
+                    <td className="px-3 py-2.5">Total</td>
+                    <td className="num px-3 py-2.5 text-right">{inr(totals.expense)}</td>
+                  </tr>
+                </tfoot>
               </table>
             )}
           </div>
