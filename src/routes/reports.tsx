@@ -1,15 +1,10 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { Fragment, useMemo, useState } from "react";
 import {
-  Bar,
-  BarChart,
   CartesianGrid,
-  Cell,
   Legend,
   Line,
   LineChart,
-  Pie,
-  PieChart,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -46,15 +41,6 @@ export const Route = createFileRoute("/reports")({
 
 type Preset = "month" | "lastMonth" | "year" | "lastYear" | "all" | "custom";
 type Dimension = "group" | "subGroup" | "includes" | "source" | "month" | "user" | "necessity";
-
-const PIE_COLORS = [
-  "var(--chart-1)",
-  "var(--chart-2)",
-  "var(--chart-3)",
-  "var(--chart-4)",
-  "var(--chart-5)",
-  "var(--primary)",
-];
 
 const selectClass =
   "h-9 w-full rounded-md border border-input bg-background px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring";
@@ -193,8 +179,9 @@ function ReportsPage() {
       : list.sort((a, b) => b.Income + b.Expense - (a.Income + a.Expense));
   }, [rows, dimension, nameOf, memberName]);
 
-  /** Group → sub group tree for the selected range. */
+  /** Group → sub group → includes tree for the selected range. */
   const groupTree = useMemo(() => {
+    type Leaf = { label: string; income: number; expense: number; investment: number; count: number };
     const map = new Map<
       string,
       {
@@ -204,10 +191,7 @@ function ReportsPage() {
         expense: number;
         investment: number;
         count: number;
-        subs: Map<
-          string,
-          { label: string; income: number; expense: number; investment: number; count: number }
-        >;
+        subs: Map<string, Leaf & { id: string; items: Map<string, Leaf> }>;
       }
     >();
     rows.forEach((t) => {
@@ -218,42 +202,61 @@ function ReportsPage() {
       const sid = t.subGroupId || "none";
       const sub =
         group.subs.get(sid) ??
-        { label: nameOf(t.subGroupId), income: 0, expense: 0, investment: 0, count: 0 };
+        {
+          id: `${gid}-${sid}`,
+          label: nameOf(t.subGroupId),
+          income: 0,
+          expense: 0,
+          investment: 0,
+          count: 0,
+          items: new Map<string, Leaf>(),
+        };
+      const iid = t.includesId || "none";
+      const item =
+        sub.items.get(iid) ??
+        {
+          label: t.includesId ? nameOf(t.includesId) : "Unspecified",
+          income: 0,
+          expense: 0,
+          investment: 0,
+          count: 0,
+        };
       const amount = Number(t.amount);
       if (t.type === "income") {
         group.income += amount;
         sub.income += amount;
+        item.income += amount;
       } else if (t.type === "investment") {
         const signed = signedInvestment(nameOf(t.subGroupId), amount);
         group.investment += signed;
         sub.investment += signed;
+        item.investment += signed;
       } else {
         group.expense += amount;
         sub.expense += amount;
+        item.expense += amount;
       }
       group.count += 1;
       sub.count += 1;
+      item.count += 1;
+      sub.items.set(iid, item);
       group.subs.set(sid, sub);
       map.set(gid, group);
     });
     return [...map.values()]
       .map((g) => ({
         ...g,
-        subRows: [...g.subs.values()].sort(
-          (a, b) => b.income + b.expense - (a.income + a.expense),
-        ),
+        subRows: [...g.subs.values()]
+          .map((s) => ({
+            ...s,
+            itemRows: [...s.items.values()].sort(
+              (a, b) => b.income + b.expense - (a.income + a.expense),
+            ),
+          }))
+          .sort((a, b) => b.income + b.expense - (a.income + a.expense)),
       }))
       .sort((a, b) => b.income + b.expense - (a.income + a.expense));
   }, [rows, nameOf]);
-
-  const shareData = useMemo(
-    () =>
-      groupTree
-        .filter((g) => g.expense > 0)
-        .slice(0, 6)
-        .map((g) => ({ name: g.label, value: g.expense })),
-    [groupTree],
-  );
 
   const trend = useMemo(() => {
     const map = new Map<string, { key: string; Income: number; Expense: number; Investment: number }>();
@@ -437,75 +440,7 @@ function ReportsPage() {
         <Stat label="Entries" value={String(totals.count)} tone="" />
       </div>
 
-      <section className="card-surface mt-4 p-5">
-        <h2 className="text-sm font-semibold">Breakdown chart</h2>
-        <div className="mt-4 h-80">
-          {breakdown.length === 0 ? (
-            <div className="grid h-full place-items-center text-sm text-muted-foreground">
-              No transactions in this range.
-            </div>
-          ) : (
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={breakdown.slice(0, 12)}>
-                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
-                <XAxis dataKey="label" tickLine={false} axisLine={false} fontSize={11} interval={0} angle={-15} textAnchor="end" height={60} />
-                <YAxis tickLine={false} axisLine={false} fontSize={12} width={70} />
-                <Tooltip
-                  formatter={(v: number) => inr(v)}
-                  contentStyle={{
-                    background: "var(--popover)",
-                    border: "1px solid var(--border)",
-                    borderRadius: 12,
-                  }}
-                />
-                <Legend />
-                <Bar dataKey="Income" fill="var(--chart-3)" radius={[6, 6, 0, 0]} />
-                <Bar dataKey="Expense" fill="var(--chart-2)" radius={[6, 6, 0, 0]} />
-                <Bar dataKey="Investment" fill="var(--chart-1)" radius={[6, 6, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          )}
-        </div>
-      </section>
-
-      <div className="mt-4 grid gap-4 lg:grid-cols-2">
-        <section className="card-surface p-5">
-          <h2 className="text-sm font-semibold">Expense share by group</h2>
-          <div className="mt-2 h-72">
-            {shareData.length === 0 ? (
-              <div className="grid h-full place-items-center text-sm text-muted-foreground">
-                No expenses in this range.
-              </div>
-            ) : (
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={shareData}
-                    dataKey="value"
-                    nameKey="name"
-                    innerRadius={55}
-                    outerRadius={90}
-                    paddingAngle={2}
-                  >
-                    {shareData.map((_, i) => (
-                      <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
-                    ))}
-                  </Pie>
-                  <Tooltip
-                    formatter={(v: number) => inr(v)}
-                    contentStyle={{
-                      background: "var(--popover)",
-                      border: "1px solid var(--border)",
-                      borderRadius: 12,
-                    }}
-                  />
-                  <Legend />
-                </PieChart>
-              </ResponsiveContainer>
-            )}
-          </div>
-        </section>
-
+      <div className="mt-4">
         <section className="card-surface p-5">
           <h2 className="text-sm font-semibold">Monthly trend</h2>
           <div className="mt-2 h-72">
@@ -547,7 +482,7 @@ function ReportsPage() {
           <table className="w-full text-sm">
             <thead className="bg-muted/60 text-left text-xs uppercase tracking-wide text-muted-foreground">
               <tr>
-                <th className="px-5 py-2.5 font-medium">Group / sub group</th>
+                <th className="px-5 py-2.5 font-medium">Group / sub group / includes</th>
                 <th className="px-3 py-2.5 text-right font-medium">Entries</th>
                 <th className="px-3 py-2.5 text-right font-medium">Income</th>
                 <th className="px-3 py-2.5 text-right font-medium">Expense</th>
@@ -584,8 +519,19 @@ function ReportsPage() {
                   </tr>
                   {expanded[g.id] &&
                     g.subRows.map((s) => (
-                      <tr key={`${g.id}-${s.label}`} className="border-t border-border/60 bg-muted/20">
-                        <td className="px-5 py-2.5 pl-12 text-muted-foreground">{s.label}</td>
+                      <Fragment key={s.id}>
+                      <tr className="border-t border-border/60 bg-muted/20">
+                        <td className="px-5 py-2.5 pl-12 text-muted-foreground">
+                          <button
+                            className="flex items-center gap-1.5"
+                            onClick={() => setExpanded((e) => ({ ...e, [s.id]: !e[s.id] }))}
+                          >
+                            <ChevronRight
+                              className={`h-3.5 w-3.5 transition-transform ${expanded[s.id] ? "rotate-90" : ""}`}
+                            />
+                            {s.label}
+                          </button>
+                        </td>
                         <td className="num px-3 py-2.5 text-right text-muted-foreground">{s.count}</td>
                         <td className="num px-3 py-2.5 text-right">{inr(s.income)}</td>
                         <td className="num px-3 py-2.5 text-right">{inr(s.expense)}</td>
@@ -597,6 +543,23 @@ function ReportsPage() {
                           {totals.expense > 0 ? `${((s.expense / totals.expense) * 100).toFixed(1)}%` : "—"}
                         </td>
                       </tr>
+                      {expanded[s.id] &&
+                        s.itemRows.map((i) => (
+                          <tr key={`${s.id}-${i.label}`} className="border-t border-border/40 bg-muted/10">
+                            <td className="px-5 py-2 pl-20 text-xs text-muted-foreground">{i.label}</td>
+                            <td className="num px-3 py-2 text-right text-xs text-muted-foreground">{i.count}</td>
+                            <td className="num px-3 py-2 text-right text-xs">{inr(i.income)}</td>
+                            <td className="num px-3 py-2 text-right text-xs">{inr(i.expense)}</td>
+                            <td className={`num px-3 py-2 text-right text-xs ${i.investment < 0 ? "text-destructive" : i.investment > 0 ? "text-success" : ""}`}>
+                              {inr(i.investment)}
+                            </td>
+                            <td className="num px-3 py-2 text-right text-xs">{inr(i.income - i.expense)}</td>
+                            <td className="num px-5 py-2 text-right text-xs text-muted-foreground">
+                              {totals.expense > 0 ? `${((i.expense / totals.expense) * 100).toFixed(1)}%` : "—"}
+                            </td>
+                          </tr>
+                        ))}
+                      </Fragment>
                     ))}
                 </Fragment>
               ))}
