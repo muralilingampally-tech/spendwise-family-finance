@@ -179,8 +179,9 @@ function ReportsPage() {
       : list.sort((a, b) => b.Income + b.Expense - (a.Income + a.Expense));
   }, [rows, dimension, nameOf, memberName]);
 
-  /** Group → sub group tree for the selected range. */
+  /** Group → sub group → includes tree for the selected range. */
   const groupTree = useMemo(() => {
+    type Leaf = { label: string; income: number; expense: number; investment: number; count: number };
     const map = new Map<
       string,
       {
@@ -190,10 +191,7 @@ function ReportsPage() {
         expense: number;
         investment: number;
         count: number;
-        subs: Map<
-          string,
-          { label: string; income: number; expense: number; investment: number; count: number }
-        >;
+        subs: Map<string, Leaf & { id: string; items: Map<string, Leaf> }>;
       }
     >();
     rows.forEach((t) => {
@@ -204,42 +202,61 @@ function ReportsPage() {
       const sid = t.subGroupId || "none";
       const sub =
         group.subs.get(sid) ??
-        { label: nameOf(t.subGroupId), income: 0, expense: 0, investment: 0, count: 0 };
+        {
+          id: `${gid}-${sid}`,
+          label: nameOf(t.subGroupId),
+          income: 0,
+          expense: 0,
+          investment: 0,
+          count: 0,
+          items: new Map<string, Leaf>(),
+        };
+      const iid = t.includesId || "none";
+      const item =
+        sub.items.get(iid) ??
+        {
+          label: t.includesId ? nameOf(t.includesId) : "Unspecified",
+          income: 0,
+          expense: 0,
+          investment: 0,
+          count: 0,
+        };
       const amount = Number(t.amount);
       if (t.type === "income") {
         group.income += amount;
         sub.income += amount;
+        item.income += amount;
       } else if (t.type === "investment") {
         const signed = signedInvestment(nameOf(t.subGroupId), amount);
         group.investment += signed;
         sub.investment += signed;
+        item.investment += signed;
       } else {
         group.expense += amount;
         sub.expense += amount;
+        item.expense += amount;
       }
       group.count += 1;
       sub.count += 1;
+      item.count += 1;
+      sub.items.set(iid, item);
       group.subs.set(sid, sub);
       map.set(gid, group);
     });
     return [...map.values()]
       .map((g) => ({
         ...g,
-        subRows: [...g.subs.values()].sort(
-          (a, b) => b.income + b.expense - (a.income + a.expense),
-        ),
+        subRows: [...g.subs.values()]
+          .map((s) => ({
+            ...s,
+            itemRows: [...s.items.values()].sort(
+              (a, b) => b.income + b.expense - (a.income + a.expense),
+            ),
+          }))
+          .sort((a, b) => b.income + b.expense - (a.income + a.expense)),
       }))
       .sort((a, b) => b.income + b.expense - (a.income + a.expense));
   }, [rows, nameOf]);
-
-  const shareData = useMemo(
-    () =>
-      groupTree
-        .filter((g) => g.expense > 0)
-        .slice(0, 6)
-        .map((g) => ({ name: g.label, value: g.expense })),
-    [groupTree],
-  );
 
   const trend = useMemo(() => {
     const map = new Map<string, { key: string; Income: number; Expense: number; Investment: number }>();
