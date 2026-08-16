@@ -482,7 +482,7 @@ function ReportsPage() {
           <table className="w-full text-sm">
             <thead className="bg-muted/60 text-left text-xs uppercase tracking-wide text-muted-foreground">
               <tr>
-                <th className="px-5 py-2.5 font-medium">Group / sub group</th>
+                <th className="px-5 py-2.5 font-medium">Group / sub group / includes</th>
                 <th className="px-3 py-2.5 text-right font-medium">Entries</th>
                 <th className="px-3 py-2.5 text-right font-medium">Income</th>
                 <th className="px-3 py-2.5 text-right font-medium">Expense</th>
@@ -519,8 +519,19 @@ function ReportsPage() {
                   </tr>
                   {expanded[g.id] &&
                     g.subRows.map((s) => (
-                      <tr key={`${g.id}-${s.label}`} className="border-t border-border/60 bg-muted/20">
-                        <td className="px-5 py-2.5 pl-12 text-muted-foreground">{s.label}</td>
+                      <Fragment key={s.id}>
+                      <tr className="border-t border-border/60 bg-muted/20">
+                        <td className="px-5 py-2.5 pl-12 text-muted-foreground">
+                          <button
+                            className="flex items-center gap-1.5"
+                            onClick={() => setExpanded((e) => ({ ...e, [s.id]: !e[s.id] }))}
+                          >
+                            <ChevronRight
+                              className={`h-3.5 w-3.5 transition-transform ${expanded[s.id] ? "rotate-90" : ""}`}
+                            />
+                            {s.label}
+                          </button>
+                        </td>
                         <td className="num px-3 py-2.5 text-right text-muted-foreground">{s.count}</td>
                         <td className="num px-3 py-2.5 text-right">{inr(s.income)}</td>
                         <td className="num px-3 py-2.5 text-right">{inr(s.expense)}</td>
@@ -532,6 +543,23 @@ function ReportsPage() {
                           {totals.expense > 0 ? `${((s.expense / totals.expense) * 100).toFixed(1)}%` : "—"}
                         </td>
                       </tr>
+                      {expanded[s.id] &&
+                        s.itemRows.map((i) => (
+                          <tr key={`${s.id}-${i.label}`} className="border-t border-border/40 bg-muted/10">
+                            <td className="px-5 py-2 pl-20 text-xs text-muted-foreground">{i.label}</td>
+                            <td className="num px-3 py-2 text-right text-xs text-muted-foreground">{i.count}</td>
+                            <td className="num px-3 py-2 text-right text-xs">{inr(i.income)}</td>
+                            <td className="num px-3 py-2 text-right text-xs">{inr(i.expense)}</td>
+                            <td className={`num px-3 py-2 text-right text-xs ${i.investment < 0 ? "text-destructive" : i.investment > 0 ? "text-success" : ""}`}>
+                              {inr(i.investment)}
+                            </td>
+                            <td className="num px-3 py-2 text-right text-xs">{inr(i.income - i.expense)}</td>
+                            <td className="num px-5 py-2 text-right text-xs text-muted-foreground">
+                              {totals.expense > 0 ? `${((i.expense / totals.expense) * 100).toFixed(1)}%` : "—"}
+                            </td>
+                          </tr>
+                        ))}
+                      </Fragment>
                     ))}
                 </Fragment>
               ))}
