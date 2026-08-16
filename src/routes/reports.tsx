@@ -423,75 +423,7 @@ function ReportsPage() {
         <Stat label="Entries" value={String(totals.count)} tone="" />
       </div>
 
-      <section className="card-surface mt-4 p-5">
-        <h2 className="text-sm font-semibold">Breakdown chart</h2>
-        <div className="mt-4 h-80">
-          {breakdown.length === 0 ? (
-            <div className="grid h-full place-items-center text-sm text-muted-foreground">
-              No transactions in this range.
-            </div>
-          ) : (
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={breakdown.slice(0, 12)}>
-                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
-                <XAxis dataKey="label" tickLine={false} axisLine={false} fontSize={11} interval={0} angle={-15} textAnchor="end" height={60} />
-                <YAxis tickLine={false} axisLine={false} fontSize={12} width={70} />
-                <Tooltip
-                  formatter={(v: number) => inr(v)}
-                  contentStyle={{
-                    background: "var(--popover)",
-                    border: "1px solid var(--border)",
-                    borderRadius: 12,
-                  }}
-                />
-                <Legend />
-                <Bar dataKey="Income" fill="var(--chart-3)" radius={[6, 6, 0, 0]} />
-                <Bar dataKey="Expense" fill="var(--chart-2)" radius={[6, 6, 0, 0]} />
-                <Bar dataKey="Investment" fill="var(--chart-1)" radius={[6, 6, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          )}
-        </div>
-      </section>
-
-      <div className="mt-4 grid gap-4 lg:grid-cols-2">
-        <section className="card-surface p-5">
-          <h2 className="text-sm font-semibold">Expense share by group</h2>
-          <div className="mt-2 h-72">
-            {shareData.length === 0 ? (
-              <div className="grid h-full place-items-center text-sm text-muted-foreground">
-                No expenses in this range.
-              </div>
-            ) : (
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={shareData}
-                    dataKey="value"
-                    nameKey="name"
-                    innerRadius={55}
-                    outerRadius={90}
-                    paddingAngle={2}
-                  >
-                    {shareData.map((_, i) => (
-                      <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
-                    ))}
-                  </Pie>
-                  <Tooltip
-                    formatter={(v: number) => inr(v)}
-                    contentStyle={{
-                      background: "var(--popover)",
-                      border: "1px solid var(--border)",
-                      borderRadius: 12,
-                    }}
-                  />
-                  <Legend />
-                </PieChart>
-              </ResponsiveContainer>
-            )}
-          </div>
-        </section>
-
+      <div className="mt-4">
         <section className="card-surface p-5">
           <h2 className="text-sm font-semibold">Monthly trend</h2>
           <div className="mt-2 h-72">
