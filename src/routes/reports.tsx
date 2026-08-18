@@ -184,7 +184,14 @@ function ReportsPage() {
 
   /** Group → sub group → includes tree for the selected range. */
   const groupTree = useMemo(() => {
-    type Leaf = { label: string; income: number; expense: number; investment: number; count: number };
+    type Leaf = {
+      id: string;
+      label: string;
+      income: number;
+      expense: number;
+      investment: number;
+      count: number;
+    };
     const map = new Map<
       string,
       {
@@ -218,6 +225,7 @@ function ReportsPage() {
       const item =
         sub.items.get(iid) ??
         {
+          id: iid,
           label: t.includesId ? nameOf(t.includesId) : "Unspecified",
           income: 0,
           expense: 0,
