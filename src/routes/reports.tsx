@@ -492,7 +492,10 @@ function ReportsPage() {
 
       <section className="card-surface mt-4 overflow-hidden">
         <div className="px-5 py-4 text-sm font-semibold">
-          Group-wise report ({range.from || "start"} → {range.to || "today"})
+          Group-wise report ({rangeLabel})
+          <span className="ml-2 font-normal text-xs text-muted-foreground">
+            Tap a name to expand, tap the amounts to list the entries behind them.
+          </span>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -510,11 +513,17 @@ function ReportsPage() {
             <tbody>
               {groupTree.map((g) => (
                 <Fragment key={g.id}>
-                  <tr className="border-t border-border">
+                  <tr
+                    className="cursor-pointer border-t border-border hover:bg-muted/30"
+                    onClick={() => openDrill(g.label, (t) => (t.groupId || "none") === g.id)}
+                  >
                     <td className="px-5 py-3">
                       <button
                         className="flex items-center gap-1.5 font-medium"
-                        onClick={() => setExpanded((e) => ({ ...e, [g.id]: !e[g.id] }))}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setExpanded((s) => ({ ...s, [g.id]: !s[g.id] }));
+                        }}
                       >
                         <ChevronRight
                           className={`h-4 w-4 transition-transform ${expanded[g.id] ? "rotate-90" : ""}`}
@@ -536,11 +545,24 @@ function ReportsPage() {
                   {expanded[g.id] &&
                     g.subRows.map((s) => (
                       <Fragment key={s.id}>
-                      <tr className="border-t border-border/60 bg-muted/20">
+                      <tr
+                        className="cursor-pointer border-t border-border/60 bg-muted/20 hover:bg-muted/40"
+                        onClick={() =>
+                          openDrill(
+                            `${g.label} › ${s.label}`,
+                            (t) =>
+                              (t.groupId || "none") === g.id &&
+                              (t.subGroupId || "none") === s.id.slice(g.id.length + 1),
+                          )
+                        }
+                      >
                         <td className="px-5 py-2.5 pl-12 text-muted-foreground">
                           <button
                             className="flex items-center gap-1.5"
-                            onClick={() => setExpanded((e) => ({ ...e, [s.id]: !e[s.id] }))}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setExpanded((st) => ({ ...st, [s.id]: !st[s.id] }));
+                            }}
                           >
                             <ChevronRight
                               className={`h-3.5 w-3.5 transition-transform ${expanded[s.id] ? "rotate-90" : ""}`}
@@ -561,7 +583,19 @@ function ReportsPage() {
                       </tr>
                       {expanded[s.id] &&
                         s.itemRows.map((i) => (
-                          <tr key={`${s.id}-${i.label}`} className="border-t border-border/40 bg-muted/10">
+                          <tr
+                            key={`${s.id}-${i.id}`}
+                            className="cursor-pointer border-t border-border/40 bg-muted/10 hover:bg-muted/30"
+                            onClick={() =>
+                              openDrill(
+                                `${g.label} › ${s.label} › ${i.label}`,
+                                (t) =>
+                                  (t.groupId || "none") === g.id &&
+                                  (t.subGroupId || "none") === s.id.slice(g.id.length + 1) &&
+                                  (t.includesId || "none") === i.id,
+                              )
+                            }
+                          >
                             <td className="px-5 py-2 pl-20 text-xs text-muted-foreground">{i.label}</td>
                             <td className="num px-3 py-2 text-right text-xs text-muted-foreground">{i.count}</td>
                             <td className="num px-3 py-2 text-right text-xs">{inr(i.income)}</td>
