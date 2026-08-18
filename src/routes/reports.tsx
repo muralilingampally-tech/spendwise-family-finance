@@ -270,8 +270,6 @@ function ReportsPage() {
   }, [rows, nameOf]);
 
   const trend = useMemo(() => {
-    return trendInner();
-    function trendInner() {
     const map = new Map<string, { key: string; Income: number; Expense: number; Investment: number }>();
     rows.forEach((t) => {
       const k = monthKey(t.date);
@@ -285,7 +283,6 @@ function ReportsPage() {
     return [...map.values()]
       .sort((a, b) => a.key.localeCompare(b.key))
       .map((r) => ({ ...r, label: monthLabel(r.key), Net: r.Income - r.Expense }));
-    }
   }, [rows, nameOf]);
 
   const rangeLabel = `${range.from || "start"} → ${range.to || "today"}`;
