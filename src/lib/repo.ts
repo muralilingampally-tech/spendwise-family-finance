@@ -155,6 +155,8 @@ export async function seedFamilyMasters(familyId: string) {
   const version = await readSeedVersion(familyId);
   const existing = await repo.list(familyId, "expenseGroups");
   if (version >= SEED_VERSION && existing.length > 0) {
+    // Remove any duplicate master rows created by earlier/concurrent seed runs.
+    await dedupeMasters(familyId);
     // Structure is current: only add seed rows introduced since the last run,
     // without touching existing masters or entries.
     await topUpSeedMasters(familyId);
@@ -188,6 +190,53 @@ export async function seedFamilyMasters(familyId: string) {
   }
 
   await writeSeedVersion(familyId, SEED_VERSION);
+}
+
+/**
+ * Collapses duplicate master rows (same collection, name and parent) down to
+ * one, repointing child masters, transactions and budgets at the survivor.
+ */
+export async function dedupeMasters(familyId: string) {
+  const remap = new Map<string, string>(); // duplicateId -> keptId
+
+  for (const collection of MASTER_COLLECTIONS) {
+    const rows = (await repo.list(familyId, collection)) as unknown as MasterItem[];
+    const seen = new Map<string, string>();
+    for (const row of rows) {
+      const parent = remap.get(row.parentId ?? "") ?? row.parentId ?? "";
+      const k = `${row.name.trim().toLowerCase()}|${parent}`;
+      const kept = seen.get(k);
+      if (kept) {
+        remap.set(row.id, kept);
+        await repo.remove(familyId, collection, row.id);
+      } else {
+        seen.set(k, row.id);
+        if (row.parentId && parent !== row.parentId) {
+          await repo.update(familyId, collection, row.id, { parentId: parent });
+        }
+      }
+    }
+  }
+
+  if (remap.size === 0) return;
+
+  const txns = (await repo.list(familyId, "transactions")) as unknown as Transaction[];
+  for (const t of txns) {
+    const patch: Record<string, unknown> = {};
+    if (t.groupId && remap.has(t.groupId)) patch.groupId = remap.get(t.groupId);
+    if (t.subGroupId && remap.has(t.subGroupId)) patch.subGroupId = remap.get(t.subGroupId);
+    if (t.includesId && remap.has(t.includesId)) patch.includesId = remap.get(t.includesId);
+    if (t.paymentSourceId && remap.has(t.paymentSourceId))
+      patch.paymentSourceId = remap.get(t.paymentSourceId);
+    if (Object.keys(patch).length) await repo.update(familyId, "transactions", t.id, patch);
+  }
+
+  const budgets = (await repo.list(familyId, "budgets")) as unknown as Budget[];
+  for (const b of budgets) {
+    if (b.groupId && remap.has(b.groupId)) {
+      await repo.update(familyId, "budgets", b.id, { groupId: remap.get(b.groupId) });
+    }
+  }
 }
 
 /** Creates any seed master rows that are missing, matching on name + parent. */
