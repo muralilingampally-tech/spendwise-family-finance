@@ -663,7 +663,11 @@ function ReportsPage() {
             </thead>
             <tbody>
               {breakdown.map((r) => (
-                <tr key={r.label} className="border-t border-border">
+                <tr
+                  key={r.label}
+                  className="cursor-pointer border-t border-border hover:bg-muted/30"
+                  onClick={() => openDrill(r.label, (t) => keyOf(t) === r.label)}
+                >
                   <td className="px-5 py-3">{r.label}</td>
                   <td className="num px-5 py-3 text-right text-success">{inr(r.Income)}</td>
                   <td className="num px-5 py-3 text-right text-destructive">{inr(r.Expense)}</td>
@@ -695,6 +699,16 @@ function ReportsPage() {
           </table>
         </div>
       </section>
+
+      {drill && (
+        <TxnDrilldown
+          title={drill.title}
+          transactions={drill.txns}
+          nameOf={nameOf}
+          memberName={memberName}
+          onClose={() => setDrill(null)}
+        />
+      )}
     </AppShell>
   );
 }
