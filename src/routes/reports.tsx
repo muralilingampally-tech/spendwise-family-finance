@@ -18,7 +18,8 @@ import { Label } from "@/components/ui/label";
 import { useApp } from "@/lib/store";
 import { inr, monthKey, monthLabel, todayISO, toLocalISODate } from "@/lib/format";
 import { signedInvestment } from "@/lib/investment";
-import type { TransactionType } from "@/lib/types";
+import { TxnDrilldown } from "@/components/TxnDrilldown";
+import type { Transaction, TransactionType } from "@/lib/types";
 
 export const Route = createFileRoute("/reports")({
   head: () => ({
@@ -81,6 +82,7 @@ function ReportsPage() {
   const [sourceFilter, setSourceFilter] = useState("");
   const [userFilter, setUserFilter] = useState("");
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const [drill, setDrill] = useState<{ title: string; txns: Transaction[] } | null>(null);
 
   const range = preset === "custom" ? custom : rangeFor(preset);
 
@@ -89,7 +91,8 @@ function ReportsPage() {
     Object.values(masters)
       .flat()
       .forEach((m) => map.set(m.id, m.name));
-    return (id: string | null) => (id ? (map.get(id) ?? "—") : "—");
+    return (id: string | null) =>
+      id ? (map.get(id) ?? "Uncategorised (removed)") : "Not specified";
   }, [masters]);
 
   const memberName = useMemo(() => {
