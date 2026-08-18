@@ -18,7 +18,8 @@ import { Label } from "@/components/ui/label";
 import { useApp } from "@/lib/store";
 import { inr, monthKey, monthLabel, todayISO, toLocalISODate } from "@/lib/format";
 import { signedInvestment } from "@/lib/investment";
-import type { TransactionType } from "@/lib/types";
+import { TxnDrilldown } from "@/components/TxnDrilldown";
+import type { Transaction, TransactionType } from "@/lib/types";
 
 export const Route = createFileRoute("/reports")({
   head: () => ({
@@ -81,6 +82,7 @@ function ReportsPage() {
   const [sourceFilter, setSourceFilter] = useState("");
   const [userFilter, setUserFilter] = useState("");
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const [drill, setDrill] = useState<{ title: string; txns: Transaction[] } | null>(null);
 
   const range = preset === "custom" ? custom : rangeFor(preset);
 
@@ -89,7 +91,8 @@ function ReportsPage() {
     Object.values(masters)
       .flat()
       .forEach((m) => map.set(m.id, m.name));
-    return (id: string | null) => (id ? (map.get(id) ?? "—") : "—");
+    return (id: string | null) =>
+      id ? (map.get(id) ?? "Uncategorised (removed)") : "Not specified";
   }, [masters]);
 
   const memberName = useMemo(() => {
@@ -181,7 +184,14 @@ function ReportsPage() {
 
   /** Group → sub group → includes tree for the selected range. */
   const groupTree = useMemo(() => {
-    type Leaf = { label: string; income: number; expense: number; investment: number; count: number };
+    type Leaf = {
+      id: string;
+      label: string;
+      income: number;
+      expense: number;
+      investment: number;
+      count: number;
+    };
     const map = new Map<
       string,
       {
@@ -215,6 +225,7 @@ function ReportsPage() {
       const item =
         sub.items.get(iid) ??
         {
+          id: iid,
           label: t.includesId ? nameOf(t.includesId) : "Unspecified",
           income: 0,
           expense: 0,
@@ -273,6 +284,11 @@ function ReportsPage() {
       .sort((a, b) => a.key.localeCompare(b.key))
       .map((r) => ({ ...r, label: monthLabel(r.key), Net: r.Income - r.Expense }));
   }, [rows, nameOf]);
+
+  const rangeLabel = `${range.from || "start"} → ${range.to || "today"}`;
+
+  const openDrill = (label: string, filter: (t: Transaction) => boolean) =>
+    setDrill({ title: `${label} · ${rangeLabel}`, txns: rows.filter(filter) });
 
   const exportCsv = () => {
     const head = [
@@ -476,7 +492,10 @@ function ReportsPage() {
 
       <section className="card-surface mt-4 overflow-hidden">
         <div className="px-5 py-4 text-sm font-semibold">
-          Group-wise report ({range.from || "start"} → {range.to || "today"})
+          Group-wise report ({rangeLabel})
+          <span className="ml-2 font-normal text-xs text-muted-foreground">
+            Tap a name to expand, tap the amounts to list the entries behind them.
+          </span>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -494,11 +513,17 @@ function ReportsPage() {
             <tbody>
               {groupTree.map((g) => (
                 <Fragment key={g.id}>
-                  <tr className="border-t border-border">
+                  <tr
+                    className="cursor-pointer border-t border-border hover:bg-muted/30"
+                    onClick={() => openDrill(g.label, (t) => (t.groupId || "none") === g.id)}
+                  >
                     <td className="px-5 py-3">
                       <button
                         className="flex items-center gap-1.5 font-medium"
-                        onClick={() => setExpanded((e) => ({ ...e, [g.id]: !e[g.id] }))}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setExpanded((s) => ({ ...s, [g.id]: !s[g.id] }));
+                        }}
                       >
                         <ChevronRight
                           className={`h-4 w-4 transition-transform ${expanded[g.id] ? "rotate-90" : ""}`}
@@ -520,11 +545,24 @@ function ReportsPage() {
                   {expanded[g.id] &&
                     g.subRows.map((s) => (
                       <Fragment key={s.id}>
-                      <tr className="border-t border-border/60 bg-muted/20">
+                      <tr
+                        className="cursor-pointer border-t border-border/60 bg-muted/20 hover:bg-muted/40"
+                        onClick={() =>
+                          openDrill(
+                            `${g.label} › ${s.label}`,
+                            (t) =>
+                              (t.groupId || "none") === g.id &&
+                              (t.subGroupId || "none") === s.id.slice(g.id.length + 1),
+                          )
+                        }
+                      >
                         <td className="px-5 py-2.5 pl-12 text-muted-foreground">
                           <button
                             className="flex items-center gap-1.5"
-                            onClick={() => setExpanded((e) => ({ ...e, [s.id]: !e[s.id] }))}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setExpanded((st) => ({ ...st, [s.id]: !st[s.id] }));
+                            }}
                           >
                             <ChevronRight
                               className={`h-3.5 w-3.5 transition-transform ${expanded[s.id] ? "rotate-90" : ""}`}
@@ -545,7 +583,19 @@ function ReportsPage() {
                       </tr>
                       {expanded[s.id] &&
                         s.itemRows.map((i) => (
-                          <tr key={`${s.id}-${i.label}`} className="border-t border-border/40 bg-muted/10">
+                          <tr
+                            key={`${s.id}-${i.id}`}
+                            className="cursor-pointer border-t border-border/40 bg-muted/10 hover:bg-muted/30"
+                            onClick={() =>
+                              openDrill(
+                                `${g.label} › ${s.label} › ${i.label}`,
+                                (t) =>
+                                  (t.groupId || "none") === g.id &&
+                                  (t.subGroupId || "none") === s.id.slice(g.id.length + 1) &&
+                                  (t.includesId || "none") === i.id,
+                              )
+                            }
+                          >
                             <td className="px-5 py-2 pl-20 text-xs text-muted-foreground">{i.label}</td>
                             <td className="num px-3 py-2 text-right text-xs text-muted-foreground">{i.count}</td>
                             <td className="num px-3 py-2 text-right text-xs">{inr(i.income)}</td>
@@ -613,7 +663,11 @@ function ReportsPage() {
             </thead>
             <tbody>
               {breakdown.map((r) => (
-                <tr key={r.label} className="border-t border-border">
+                <tr
+                  key={r.label}
+                  className="cursor-pointer border-t border-border hover:bg-muted/30"
+                  onClick={() => openDrill(r.label, (t) => keyOf(t) === r.label)}
+                >
                   <td className="px-5 py-3">{r.label}</td>
                   <td className="num px-5 py-3 text-right text-success">{inr(r.Income)}</td>
                   <td className="num px-5 py-3 text-right text-destructive">{inr(r.Expense)}</td>
@@ -645,6 +699,16 @@ function ReportsPage() {
           </table>
         </div>
       </section>
+
+      {drill && (
+        <TxnDrilldown
+          title={drill.title}
+          transactions={drill.txns}
+          nameOf={nameOf}
+          memberName={memberName}
+          onClose={() => setDrill(null)}
+        />
+      )}
     </AppShell>
   );
 }
