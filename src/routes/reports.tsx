@@ -154,8 +154,10 @@ function ReportsPage() {
   const keyFor = (t: (typeof rows)[number]) => {
     if (dimension === "group") return nameOf(t.groupId);
     if (dimension === "subGroup") return `${nameOf(t.groupId)} › ${nameOf(t.subGroupId)}`;
-    if (dimension === "includes")
-      return t.includesId ? `${nameOf(t.subGroupId)} › ${nameOf(t.includesId)}` : "Not specified";
+    if (dimension === "includes") {
+      const detail = t.includesId ? nameOf(t.includesId) : (t.remarks ?? "").trim();
+      return detail ? `${nameOf(t.subGroupId)} › ${detail}` : nameOf(t.subGroupId);
+    }
     if (dimension === "necessity")
       return t.necessity ? t.necessity[0].toUpperCase() + t.necessity.slice(1) : "Not tagged";
     if (dimension === "source") return nameOf(t.paymentSourceId);
