@@ -561,18 +561,22 @@ function ReportsPage() {
                         }
                       >
                         <td className="px-5 py-2.5 pl-12 text-muted-foreground">
-                          <button
-                            className="flex items-center gap-1.5"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setExpanded((st) => ({ ...st, [s.id]: !st[s.id] }));
-                            }}
-                          >
-                            <ChevronRight
-                              className={`h-3.5 w-3.5 transition-transform ${expanded[s.id] ? "rotate-90" : ""}`}
-                            />
-                            {s.label}
-                          </button>
+                          {s.itemRows.length > 0 ? (
+                            <button
+                              className="flex items-center gap-1.5"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setExpanded((st) => ({ ...st, [s.id]: !st[s.id] }));
+                              }}
+                            >
+                              <ChevronRight
+                                className={`h-3.5 w-3.5 transition-transform ${expanded[s.id] ? "rotate-90" : ""}`}
+                              />
+                              {s.label}
+                            </button>
+                          ) : (
+                            <span className="pl-5">{s.label}</span>
+                          )}
                         </td>
                         <td className="num px-3 py-2.5 text-right text-muted-foreground">{s.count}</td>
                         <td className="num px-3 py-2.5 text-right">{inr(s.income)}</td>
@@ -593,10 +597,13 @@ function ReportsPage() {
                             onClick={() =>
                               openDrill(
                                 `${g.label} › ${s.label} › ${i.label}`,
-                                (t) =>
-                                  (t.groupId || "none") === g.id &&
-                                  (t.subGroupId || "none") === s.id.slice(g.id.length + 1) &&
-                                  (t.includesId || "none") === i.id,
+                                (t) => {
+                                  if ((t.groupId || "none") !== g.id) return false;
+                                  if ((t.subGroupId || "none") !== s.id.slice(g.id.length + 1)) return false;
+                                  const memo = (t.remarks ?? "").trim();
+                                  const key = t.includesId || (memo ? `memo:${memo}` : "none");
+                                  return key === i.id;
+                                },
                               )
                             }
                           >
