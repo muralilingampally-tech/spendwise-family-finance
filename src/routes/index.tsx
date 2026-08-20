@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import {
   Bar,
   BarChart,
@@ -13,9 +13,11 @@ import {
 import { ArrowDownRight, ArrowUpRight, PiggyBank, Scale } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
 import { Button } from "@/components/ui/button";
+import { TxnDrilldown } from "@/components/TxnDrilldown";
 import { useApp } from "@/lib/store";
 import { signedInvestment } from "@/lib/investment";
 import { inr, monthKey, monthLabel, shortDate } from "@/lib/format";
+import type { Transaction } from "@/lib/types";
 
 
 export const Route = createFileRoute("/")({
@@ -38,6 +40,7 @@ export const Route = createFileRoute("/")({
 
 function Dashboard() {
   const { transactions: allTransactions, masters, members, user } = useApp();
+  const [drill, setDrill] = useState<{ title: string; txns: Transaction[] } | null>(null);
 
   const currentMonth = useMemo(() => monthKey(new Date().toISOString()), []);
   const transactions = useMemo(
@@ -110,7 +113,7 @@ function Dashboard() {
       .filter((t) => t.type === "expense")
       .forEach((t) => map.set(t.groupId, (map.get(t.groupId) ?? 0) + Number(t.amount)));
     return [...map.entries()]
-      .map(([id, value]) => ({ name: nameOf(id), value }))
+      .map(([id, value]) => ({ id, name: nameOf(id), value }))
       .sort((a, b) => b.value - a.value);
   }, [transactions, nameOf]);
 
@@ -186,6 +189,9 @@ function Dashboard() {
 
         <section className="card-surface p-5 lg:col-span-2">
           <h2 className="text-sm font-semibold">Expense by group (this month)</h2>
+      <p className="mt-3 text-xs text-muted-foreground">
+        Tap an amount to see the entries behind it.
+      </p>
           <div className="mt-4 h-72 overflow-auto">
             {byCategory.length === 0 ? (
               <Empty />
@@ -199,14 +205,31 @@ function Dashboard() {
                 </thead>
                 <tbody>
                   {byCategory.map((c) => (
-                    <tr key={c.name} className="border-t border-border">
+                    <tr
+                      key={c.id}
+                      className="cursor-pointer border-t border-border hover:bg-muted/30"
+                      onClick={() =>
+                        setDrill({
+                          title: `${c.name} — ${monthLabel(currentMonth)}`,
+                          txns: transactions.filter((t) => t.type === "expense" && t.groupId === c.id),
+                        })
+                      }
+                    >
                       <td className="px-3 py-2.5">{c.name}</td>
                       <td className="num px-3 py-2.5 text-right font-medium">{inr(c.value)}</td>
                     </tr>
                   ))}
                 </tbody>
                 <tfoot>
-                  <tr className="border-t border-border bg-muted/40 font-semibold">
+                  <tr
+                    className="cursor-pointer border-t border-border bg-muted/40 font-semibold"
+                    onClick={() =>
+                      setDrill({
+                        title: `All expenses — ${monthLabel(currentMonth)}`,
+                        txns: transactions.filter((t) => t.type === "expense"),
+                      })
+                    }
+                  >
                     <td className="px-3 py-2.5">Total</td>
                     <td className="num px-3 py-2.5 text-right">{inr(totals.expense)}</td>
                   </tr>
@@ -315,6 +338,16 @@ function Dashboard() {
           </table>
         </div>
       </section>
+
+      {drill && (
+        <TxnDrilldown
+          title={drill.title}
+          transactions={drill.txns}
+          nameOf={nameOf}
+          memberName={memberName}
+          onClose={() => setDrill(null)}
+        />
+      )}
     </AppShell>
   );
 }

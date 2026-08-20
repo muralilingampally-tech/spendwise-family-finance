@@ -666,7 +666,13 @@ function ReportsPage() {
                 <tr
                   key={r.label}
                   className="cursor-pointer border-t border-border hover:bg-muted/30"
-                  onClick={() => openDrill(r.label, (t) => keyOf(t) === r.label)}
+                  onClick={() =>
+                    openDrill(r.label, (t) =>
+                      dimension === "month"
+                        ? monthLabel(keyFor(t)) === r.label
+                        : keyFor(t) === r.label,
+                    )
+                  }
                 >
                   <td className="px-5 py-3">{r.label}</td>
                   <td className="num px-5 py-3 text-right text-success">{inr(r.Income)}</td>
