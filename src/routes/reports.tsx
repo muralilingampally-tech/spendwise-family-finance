@@ -155,7 +155,7 @@ function ReportsPage() {
     if (dimension === "group") return nameOf(t.groupId);
     if (dimension === "subGroup") return `${nameOf(t.groupId)} › ${nameOf(t.subGroupId)}`;
     if (dimension === "includes") {
-      const detail = t.includesId ? nameOf(t.includesId) : (t.remarks ?? "").trim();
+      const detail = t.includesId ? nameOf(t.includesId) : "";
       return detail ? `${nameOf(t.subGroupId)} › ${detail}` : nameOf(t.subGroupId);
     }
     if (dimension === "necessity")
@@ -223,15 +223,14 @@ function ReportsPage() {
           count: 0,
           items: new Map<string, Leaf>(),
         };
-      // Third level only exists when there is real detail: either an Includes
-      // master, or a typed memo (used when "Others" is picked).
-      const memo = (t.remarks ?? "").trim();
-      const iid = t.includesId || (memo ? `memo:${memo}` : "none");
+      // Third level only exists when there is a real Includes master item.
+      // Memos are not shown as rows here — they appear in the drilldown modal.
+      const iid = t.includesId || "none";
       const item =
         sub.items.get(iid) ??
         {
           id: iid,
-          label: t.includesId ? nameOf(t.includesId) : memo,
+          label: t.includesId ? nameOf(t.includesId) : "",
           income: 0,
           expense: 0,
           investment: 0,
@@ -602,8 +601,7 @@ function ReportsPage() {
                                 (t) => {
                                   if ((t.groupId || "none") !== g.id) return false;
                                   if ((t.subGroupId || "none") !== s.id.slice(g.id.length + 1)) return false;
-                                  const memo = (t.remarks ?? "").trim();
-                                  const key = t.includesId || (memo ? `memo:${memo}` : "none");
+                                  const key = t.includesId || "none";
                                   return key === i.id;
                                 },
                               )
