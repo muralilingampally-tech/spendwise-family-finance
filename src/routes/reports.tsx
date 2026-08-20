@@ -221,12 +221,15 @@ function ReportsPage() {
           count: 0,
           items: new Map<string, Leaf>(),
         };
-      const iid = t.includesId || "none";
+      // Third level only exists when there is real detail: either an Includes
+      // master, or a typed memo (used when "Others" is picked).
+      const memo = (t.remarks ?? "").trim();
+      const iid = t.includesId || (memo ? `memo:${memo}` : "none");
       const item =
         sub.items.get(iid) ??
         {
           id: iid,
-          label: t.includesId ? nameOf(t.includesId) : "Unspecified",
+          label: t.includesId ? nameOf(t.includesId) : memo,
           income: 0,
           expense: 0,
           investment: 0,
@@ -260,9 +263,10 @@ function ReportsPage() {
         subRows: [...g.subs.values()]
           .map((s) => ({
             ...s,
-            itemRows: [...s.items.values()].sort(
-              (a, b) => b.income + b.expense - (a.income + a.expense),
-            ),
+            itemRows: [...s.items.values()]
+              // Drop the placeholder bucket for entries with no includes and no memo.
+              .filter((i) => i.id !== "none")
+              .sort((a, b) => b.income + b.expense - (a.income + a.expense)),
           }))
           .sort((a, b) => b.income + b.expense - (a.income + a.expense)),
       }))
