@@ -205,14 +205,31 @@ function Dashboard() {
                 </thead>
                 <tbody>
                   {byCategory.map((c) => (
-                    <tr key={c.name} className="border-t border-border">
+                    <tr
+                      key={c.id}
+                      className="cursor-pointer border-t border-border hover:bg-muted/30"
+                      onClick={() =>
+                        setDrill({
+                          title: `${c.name} — ${monthLabel(currentMonth)}`,
+                          txns: transactions.filter((t) => t.type === "expense" && t.groupId === c.id),
+                        })
+                      }
+                    >
                       <td className="px-3 py-2.5">{c.name}</td>
                       <td className="num px-3 py-2.5 text-right font-medium">{inr(c.value)}</td>
                     </tr>
                   ))}
                 </tbody>
                 <tfoot>
-                  <tr className="border-t border-border bg-muted/40 font-semibold">
+                  <tr
+                    className="cursor-pointer border-t border-border bg-muted/40 font-semibold"
+                    onClick={() =>
+                      setDrill({
+                        title: `All expenses — ${monthLabel(currentMonth)}`,
+                        txns: transactions.filter((t) => t.type === "expense"),
+                      })
+                    }
+                  >
                     <td className="px-3 py-2.5">Total</td>
                     <td className="num px-3 py-2.5 text-right">{inr(totals.expense)}</td>
                   </tr>
