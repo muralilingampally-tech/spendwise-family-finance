@@ -265,7 +265,7 @@ function ReportsPage() {
           .map((s) => ({
             ...s,
             itemRows: [...s.items.values()]
-              // Drop the placeholder bucket for entries with no includes and no memo.
+              // Drop the placeholder bucket for entries with no Includes master.
               .filter((i) => i.id !== "none")
               .sort((a, b) => b.income + b.expense - (a.income + a.expense)),
           }))
