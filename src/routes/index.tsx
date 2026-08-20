@@ -338,6 +338,16 @@ function Dashboard() {
           </table>
         </div>
       </section>
+
+      {drill && (
+        <TxnDrilldown
+          title={drill.title}
+          transactions={drill.txns}
+          nameOf={nameOf}
+          memberName={memberName}
+          onClose={() => setDrill(null)}
+        />
+      )}
     </AppShell>
   );
 }
