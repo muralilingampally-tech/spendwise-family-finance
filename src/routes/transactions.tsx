@@ -407,12 +407,12 @@ function TransactionsPage() {
         (record) => record.some((value) => value.trim() !== ""),
       );
       const dataRows = rows.filter((record) => !record[0].trim().startsWith("#"));
-      if (dataRows.length < 2) throw new Error("This CSV does not contain any transaction rows.");
+      if (dataRows.length < 2) throw new Error("This file does not contain any transaction rows.");
 
       const header = dataRows[0].map((value) => normalizeHeader(value));
       const findColumn = (names: string[]) => {
         const idx = header.findIndex((value) => names.some((name) => value === name));
-        if (idx === -1) throw new Error(`Missing required CSV column: ${names.join(" or ")}.`);
+        if (idx === -1) throw new Error(`Missing required column: ${names.join(" or ")}.`);
         return idx;
       };
 
@@ -532,7 +532,7 @@ function TransactionsPage() {
       await bulkImportTransactions(records);
       toast.success(`Imported ${records.length} transaction${records.length === 1 ? "" : "s"}`);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Could not import CSV file");
+      toast.error(error instanceof Error ? error.message : "Could not import file");
     } finally {
       setImporting(false);
       if (event.target) event.target.value = "";
@@ -545,15 +545,18 @@ function TransactionsPage() {
       actions={
         <div className="flex flex-wrap gap-2">
           <Button size="sm" variant="outline" onClick={exportTemplate}>
-            <Download className="mr-1 h-4 w-4" /> Export CSV template
+            <Download className="mr-1 h-4 w-4" /> Excel template
+          </Button>
+          <Button size="sm" variant="outline" onClick={exportExcel} disabled={filtered.length === 0}>
+            <Download className="mr-1 h-4 w-4" /> Export Excel
           </Button>
           <Button size="sm" variant="outline" onClick={() => fileInputRef.current?.click()} disabled={importing}>
-            <Upload className="mr-1 h-4 w-4" /> {importing ? "Importing…" : "Import CSV"}
+            <Upload className="mr-1 h-4 w-4" /> {importing ? "Importing…" : "Import Excel / CSV"}
           </Button>
           <input
             ref={fileInputRef}
             type="file"
-            accept=".csv,text/csv"
+            accept=".xlsx,.csv,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             className="hidden"
             onChange={importCsv}
           />
