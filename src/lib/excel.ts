@@ -14,8 +14,10 @@ export const SHEET_HEADER = [
 
 export interface ExcelLists {
   groups: string[];
-  subGroups: string[];
-  includes: string[];
+  /** [group, subGroup] pairs. */
+  subGroups: [string, string][];
+  /** [group, subGroup, includes] triples. */
+  includes: [string, string, string][];
   paymentSources: string[];
   members: string[];
 }
@@ -30,12 +32,11 @@ export async function buildTransactionsWorkbook(
   const wb = new ExcelJS.Workbook();
   const ws = wb.addWorksheet("Transactions", { views: [{ state: "frozen", ySplit: 1 }] });
   const ref = wb.addWorksheet("Lists");
+  const tree = wb.addWorksheet("Tree", { state: "hidden" });
 
   const cols: [string, string[]][] = [
     ["Types", ["expense", "income", "investment"]],
     ["Groups", uniq(lists.groups)],
-    ["SubGroups", uniq(lists.subGroups)],
-    ["Includes", uniq(lists.includes)],
     ["Necessity", ["essential", "discretionary"]],
     ["PaymentSources", uniq(lists.paymentSources)],
     ["Members", uniq(lists.members)],
@@ -51,6 +52,23 @@ export async function buildTransactionsWorkbook(
     ranges[name] = `Lists!$${letter}$2:$${letter}$${Math.max(2, values.length + 1)}`;
   });
 
+  // Hidden tree: A=group key, B=sub group; D=group|sub key, E=includes. Sorted so
+  // each parent's children are contiguous (needed for OFFSET-based dropdowns).
+  const subs = [...new Map(lists.subGroups.map((p) => [`${p[0]}|${p[1]}`, p])).values()].sort(
+    (a, b) => a[0].localeCompare(b[0]) || a[1].localeCompare(b[1]),
+  );
+  subs.forEach(([g, s], i) => {
+    tree.getCell(`A${i + 1}`).value = g;
+    tree.getCell(`B${i + 1}`).value = s;
+  });
+  const incs = [
+    ...new Map(lists.includes.map((t) => [`${t[0]}|${t[1]}|${t[2]}`, t])).values(),
+  ].sort((a, b) => `${a[0]}|${a[1]}`.localeCompare(`${b[0]}|${b[1]}`) || a[2].localeCompare(b[2]));
+  incs.forEach(([g, s, n], i) => {
+    tree.getCell(`D${i + 1}`).value = `${g}|${s}`;
+    tree.getCell(`E${i + 1}`).value = n;
+  });
+
   ws.addRow(SHEET_HEADER);
   const head = ws.getRow(1);
   head.font = { bold: true, color: { argb: "FFFFFFFF" } };
@@ -64,8 +82,6 @@ export async function buildTransactionsWorkbook(
   const map: [string, string][] = [
     ["B", "Types"],
     ["C", "Groups"],
-    ["D", "SubGroups"],
-    ["E", "Includes"],
     ["F", "Necessity"],
     ["G", "PaymentSources"],
     ["J", "Members"],
@@ -79,6 +95,22 @@ export async function buildTransactionsWorkbook(
         showErrorMessage: c === "B",
       };
     });
+    // Sub group: only the sub groups under the Group chosen in this row.
+    ws.getCell(`D${r}`).dataValidation = {
+      type: "list",
+      allowBlank: true,
+      formulae: [
+        `OFFSET(Tree!$B$1,MATCH($C${r},Tree!$A:$A,0)-1,0,MAX(1,COUNTIF(Tree!$A:$A,$C${r})),1)`,
+      ],
+    };
+    // Includes: only items under the chosen Group + Sub group.
+    ws.getCell(`E${r}`).dataValidation = {
+      type: "list",
+      allowBlank: true,
+      formulae: [
+        `OFFSET(Tree!$E$1,MATCH($C${r}&"|"&$D${r},Tree!$D:$D,0)-1,0,MAX(1,COUNTIF(Tree!$D:$D,$C${r}&"|"&$D${r})),1)`,
+      ],
+    };
   }
 
   const buf = await wb.xlsx.writeBuffer();
