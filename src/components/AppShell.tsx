@@ -9,6 +9,7 @@ import {
   LogOut,
   Menu,
   Wallet,
+  Scale,
   X,
 } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
@@ -21,6 +22,7 @@ const NAV = [
   { to: "/transactions", label: "Transactions", icon: ListPlus },
   { to: "/reports", label: "Reports", icon: BarChart3 },
   { to: "/budget", label: "Budget", icon: Target },
+  { to: "/networth", label: "Net Worth", icon: Scale },
   { to: "/masters/expense-groups", label: "Masters", icon: Layers, match: "/masters" },
   { to: "/settings", label: "Settings", icon: Settings },
 ] as const;
