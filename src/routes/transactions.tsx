@@ -369,13 +369,33 @@ function TransactionsPage() {
     downloadBlob(blob, `spendwise-template-${todayISO()}.xlsx`);
   };
 
-  const excelLists = () => ({
-    groups: allGroupNames,
-    subGroups: allSubGroupNames,
-    includes: masters.expenseIncludes.map((i) => i.name),
-    paymentSources: allPaymentSourceNames,
-    members: allMemberNames,
-  });
+  const excelLists = () => {
+    const allGroups = [...masters.expenseGroups, ...masters.incomeGroups, ...masters.investmentGroups];
+    const allSubs = [
+      ...masters.expenseSubGroups,
+      ...masters.incomeSubGroups,
+      ...masters.investmentSubGroups,
+    ];
+    const gName = new Map(allGroups.map((g) => [g.id, g.name]));
+    const subPairs: [string, string][] = allSubs
+      .filter((s) => s.parentId && gName.has(s.parentId))
+      .map((s) => [gName.get(s.parentId!)!, s.name]);
+    const subById = new Map(masters.expenseSubGroups.map((s) => [s.id, s]));
+    const incTriples: [string, string, string][] = masters.expenseIncludes
+      .map((i) => {
+        const s = i.parentId ? subById.get(i.parentId) : undefined;
+        const g = s?.parentId ? gName.get(s.parentId) : undefined;
+        return s && g ? ([g, s.name, i.name] as [string, string, string]) : null;
+      })
+      .filter((x): x is [string, string, string] => !!x);
+    return {
+      groups: allGroupNames,
+      subGroups: subPairs,
+      includes: incTriples,
+      paymentSources: allPaymentSourceNames,
+      members: allMemberNames,
+    };
+  };
 
   const exportExcel = async () => {
     const rows = [...filtered]
