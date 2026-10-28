@@ -95,7 +95,7 @@ export async function readWorkbookRows(file: File): Promise<string[][]> {
   const ws = wb.getWorksheet("Transactions") ?? wb.worksheets[0];
   if (!ws) return [];
   const out: string[][] = [];
-  ws.eachRow({ includeEmpty: false }, (row) => {
+  ws.eachRow({ includeEmpty: false }, (row: import("exceljs").Row) => {
     const cells: string[] = [];
     for (let c = 1; c <= SHEET_HEADER.length; c++) {
       const v = row.getCell(c).value as unknown;
