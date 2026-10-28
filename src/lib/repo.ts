@@ -155,11 +155,10 @@ export async function seedFamilyMasters(familyId: string) {
   const version = await readSeedVersion(familyId);
   const existing = await repo.list(familyId, "expenseGroups");
   if (version >= SEED_VERSION && existing.length > 0) {
-    // Remove any duplicate master rows created by earlier/concurrent seed runs.
+    // Merge duplicates and masters the user renamed (old seed name re-created
+    // alongside the new one). Starter rows are never re-added once the
+    // workspace exists, so renamed/deleted masters stay that way.
     await dedupeMasters(familyId);
-    // Structure is current: only add seed rows introduced since the last run,
-    // without touching existing masters or entries.
-    await topUpSeedMasters(familyId);
     return;
   }
 
@@ -170,27 +169,35 @@ export async function seedFamilyMasters(familyId: string) {
   }
 
   const parents = new Map<string, string>();
-
   for (const row of buildSeedRows()) {
+    const parentId = row.parentKey ? parents.get(row.parentKey) ?? null : null;
     const created = await repo.create(familyId, row.collection, {
       name: row.name,
-      parentId: row.parentKey ? (parents.get(row.parentKey) ?? null) : null,
+      parentId,
       kind: row.kind ?? null,
       active: true,
       createdAt: now(),
       updatedAt: now(),
     });
-
-    if (!row.parentKey) {
-      parents.set(`${row.collection}:${row.name}`, created.id);
-    } else if (row.collection === "expenseSubGroups") {
-      const groupName = row.parentKey.split(":")[1];
-      parents.set(`expenseSubGroups:${groupName} › ${row.name}`, created.id);
+    const grandParent = row.parentKey?.split(":")[1];
+    const key =
+      row.collection === "expenseSubGroups" && grandParent
+        ? `${row.collection}:${grandParent} › ${row.name}`
+        : `${row.collection}:${row.name}`;
+    parents.set(key, created.id);
     }
   }
 
   await writeSeedVersion(familyId, SEED_VERSION);
 }
+
+/**
+ * Renamed masters: [collection, old name, new name]. Rows with the old name are
+ * merged into the row with the new name (same parent), entries repointed.
+ */
+const MASTER_RENAMES: [string, string, string][] = [
+  ["expenseSubGroups", "food order", "online orders"],
+];
 
 /**
  * Collapses duplicate master rows (same collection, name and parent) down to
@@ -200,11 +207,22 @@ export async function dedupeMasters(familyId: string) {
   const remap = new Map<string, string>(); // duplicateId -> keptId
 
   for (const collection of MASTER_COLLECTIONS) {
-    const rows = (await repo.list(familyId, collection)) as unknown as MasterItem[];
+    const raw = (await repo.list(familyId, collection)) as unknown as MasterItem[];
+    const canon = (n: string) => {
+      const l = n.trim().toLowerCase();
+      const r = MASTER_RENAMES.find(([c, o]) => c === collection && o === l);
+      return r ? r[2] : l;
+    };
+    // Rows already carrying the canonical name win over renamed leftovers.
+    const rows = [...raw].sort(
+      (a, b) =>
+        Number(canon(a.name) !== a.name.trim().toLowerCase()) -
+        Number(canon(b.name) !== b.name.trim().toLowerCase()),
+    );
     const seen = new Map<string, string>();
     for (const row of rows) {
       const parent = remap.get(row.parentId ?? "") ?? row.parentId ?? "";
-      const k = `${row.name.trim().toLowerCase()}|${parent}`;
+      const k = `${canon(row.name)}|${parent}`;
       const kept = seen.get(k);
       if (kept) {
         remap.set(row.id, kept);
