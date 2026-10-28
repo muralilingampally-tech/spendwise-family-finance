@@ -30,7 +30,7 @@ export const LOANS: LoanDef[] = [
     subGroupName: "Gold Loan",
     principal: 444600,
     annualRate: 0.0915,
-    startDate: "2026-10-28",
+    startDate: "2026-10-10",
     method: "daily",
     note: "Bullet repayment in 12 months · 9.15% p.a. on daily balance",
   },
