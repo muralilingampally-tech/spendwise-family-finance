@@ -185,7 +185,6 @@ export async function seedFamilyMasters(familyId: string) {
         ? `${row.collection}:${grandParent} › ${row.name}`
         : `${row.collection}:${row.name}`;
     parents.set(key, created.id);
-    }
   }
 
   await writeSeedVersion(familyId, SEED_VERSION);
