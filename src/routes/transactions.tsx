@@ -337,7 +337,7 @@ function TransactionsPage() {
         todayISO(),
         "expense",
         "Outside food",
-        "Food order",
+        "Online orders",
         "Munchies",
         "discretionary",
         "Swiggy Card",
