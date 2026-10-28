@@ -29,7 +29,7 @@ export const SEED_EXPENSE_TREE: Record<string, Record<string, string[]>> = {
     "Other drinks": ["Chamomile tea", "Green tea"],
   },
   "Outside food": {
-    "Food order": ["Food", "Munchies", "Chocolates", "Ice creams", "Bakery items"],
+    "Online orders": ["Food", "Munchies", "Chocolates", "Ice creams", "Bakery items"],
     "Tea & Coffee": [],
     Snacks: [],
     "Restaurant/Dine out": ["Bakery items"],
