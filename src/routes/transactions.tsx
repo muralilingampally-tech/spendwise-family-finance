@@ -19,6 +19,7 @@ import { signedInvestment } from "@/lib/investment";
 import { inr, normalizeDate, shortDate, todayISO } from "@/lib/format";
 import { NECESSITY_GROUPS } from "@/lib/seed";
 import type { Necessity, Transaction, TransactionType } from "@/lib/types";
+import { buildTransactionsWorkbook, downloadBlob, readWorkbookRows } from "@/lib/excel";
 
 export const Route = createFileRoute("/transactions")({
   head: () => ({
@@ -310,7 +311,7 @@ function TransactionsPage() {
 
   const canDelete = user?.role === "admin";
 
-  const exportTemplate = () => {
+  const exportTemplate = async () => {
     const helperLines = [
       "# Groups: " + allGroupNames.join(" | "),
       "# Sub groups: " + allSubGroupNames.join(" | "),
@@ -363,12 +364,36 @@ function TransactionsPage() {
       ...exampleRows.map((row) => row.map((value) => `"${String(value).replace(/"/g, '""')}"`).join(",")),
     ].join("\n");
 
-    const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8;" }));
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `spendwise-transactions-template-${todayISO()}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
+    void csv;
+    const blob = await buildTransactionsWorkbook(exampleRows, excelLists());
+    downloadBlob(blob, `spendwise-template-${todayISO()}.xlsx`);
+  };
+
+  const excelLists = () => ({
+    groups: allGroupNames,
+    subGroups: allSubGroupNames,
+    includes: masters.expenseIncludes.map((i) => i.name),
+    paymentSources: allPaymentSourceNames,
+    members: allMemberNames,
+  });
+
+  const exportExcel = async () => {
+    const rows = [...filtered]
+      .sort((a, b) => a.date.localeCompare(b.date))
+      .map((t) => [
+        t.date,
+        t.type,
+        nameOf(t.groupId),
+        t.subGroupId ? nameOf(t.subGroupId) : "",
+        t.includesId ? nameOf(t.includesId) : "",
+        t.necessity ?? "",
+        nameOf(t.paymentSourceId),
+        Number(t.amount),
+        t.remarks ?? "",
+        memberName(t),
+      ]);
+    const blob = await buildTransactionsWorkbook(rows, excelLists());
+    downloadBlob(blob, `spendwise-transactions-${todayISO()}.xlsx`);
   };
 
   const importCsv = async (event: ChangeEvent<HTMLInputElement>) => {
@@ -377,15 +402,17 @@ function TransactionsPage() {
 
     try {
       setImporting(true);
-      const text = await file.text();
-      const rows = parseCsvRecords(text).filter((record) => record.some((value) => value.trim() !== ""));
+      const isXlsx = /\.xlsx$/i.test(file.name);
+      const rows = (isXlsx ? await readWorkbookRows(file) : parseCsvRecords(await file.text())).filter(
+        (record) => record.some((value) => value.trim() !== ""),
+      );
       const dataRows = rows.filter((record) => !record[0].trim().startsWith("#"));
-      if (dataRows.length < 2) throw new Error("This CSV does not contain any transaction rows.");
+      if (dataRows.length < 2) throw new Error("This file does not contain any transaction rows.");
 
       const header = dataRows[0].map((value) => normalizeHeader(value));
       const findColumn = (names: string[]) => {
         const idx = header.findIndex((value) => names.some((name) => value === name));
-        if (idx === -1) throw new Error(`Missing required CSV column: ${names.join(" or ")}.`);
+        if (idx === -1) throw new Error(`Missing required column: ${names.join(" or ")}.`);
         return idx;
       };
 
@@ -505,7 +532,7 @@ function TransactionsPage() {
       await bulkImportTransactions(records);
       toast.success(`Imported ${records.length} transaction${records.length === 1 ? "" : "s"}`);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Could not import CSV file");
+      toast.error(error instanceof Error ? error.message : "Could not import file");
     } finally {
       setImporting(false);
       if (event.target) event.target.value = "";
@@ -518,15 +545,18 @@ function TransactionsPage() {
       actions={
         <div className="flex flex-wrap gap-2">
           <Button size="sm" variant="outline" onClick={exportTemplate}>
-            <Download className="mr-1 h-4 w-4" /> Export CSV template
+            <Download className="mr-1 h-4 w-4" /> Excel template
+          </Button>
+          <Button size="sm" variant="outline" onClick={exportExcel} disabled={filtered.length === 0}>
+            <Download className="mr-1 h-4 w-4" /> Export Excel
           </Button>
           <Button size="sm" variant="outline" onClick={() => fileInputRef.current?.click()} disabled={importing}>
-            <Upload className="mr-1 h-4 w-4" /> {importing ? "Importing…" : "Import CSV"}
+            <Upload className="mr-1 h-4 w-4" /> {importing ? "Importing…" : "Import Excel / CSV"}
           </Button>
           <input
             ref={fileInputRef}
             type="file"
-            accept=".csv,text/csv"
+            accept=".xlsx,.csv,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             className="hidden"
             onChange={importCsv}
           />
