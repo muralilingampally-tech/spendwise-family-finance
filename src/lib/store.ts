@@ -224,9 +224,15 @@ export const useApp = create<AppState>((set, get) => ({
     if (!user) return;
     values = withCanonicalDate(values);
     if (id) {
-      await repo.update(user.familyId, "transactions", id, { ...values, updatedAt: now() });
+      const patch = { ...values, updatedAt: now() };
+      await repo.update(user.familyId, "transactions", id, patch);
+      set((state) => ({
+        transactions: state.transactions
+          .map((t) => t.id === id ? { ...t, ...patch } : t)
+          .sort((a, b) => b.date.localeCompare(a.date)),
+      }));
     } else {
-      await repo.create(user.familyId, "transactions", {
+      const created = await repo.create(user.familyId, "transactions", {
         ...values,
         createdBy: values.createdBy ?? user.uid,
         createdByName:
@@ -234,34 +240,49 @@ export const useApp = create<AppState>((set, get) => ({
         createdAt: now(),
         updatedAt: now(),
       });
+      set((state) => ({
+        transactions: [created as unknown as Transaction, ...state.transactions]
+          .sort((a, b) => b.date.localeCompare(a.date)),
+      }));
     }
-    await get().refresh();
   },
 
   bulkImportTransactions: async (rows) => {
     const user = get().user;
     if (!user) return;
 
-    await Promise.all(
-      rows.map(withCanonicalDate).map((values) =>
-        repo.create(user.familyId, "transactions", {
+    const canonicalRows = rows.map(withCanonicalDate);
+    // Bound request concurrency and retain successfully saved rows if a later
+    // write fails. Never reload unrelated collections after an import.
+    for (let offset = 0; offset < canonicalRows.length; offset += 20) {
+      const results = await Promise.allSettled(
+        canonicalRows.slice(offset, offset + 20).map((values) =>
+          repo.create(user.familyId, "transactions", {
           ...values,
           createdBy: values.createdBy ?? user.uid,
           createdByName:
             values.createdByName ?? user.displayName ?? user.email ?? "Unknown",
           createdAt: now(),
           updatedAt: now(),
-        }),
-      ),
-    );
-    await get().refresh();
+          }),
+        ),
+      );
+      const created = results.flatMap((result) =>
+        result.status === "fulfilled" ? [result.value as unknown as Transaction] : [],
+      );
+      set((state) => ({
+        transactions: [...created, ...state.transactions].sort((a, b) => b.date.localeCompare(a.date)),
+      }));
+      const failure = results.find((result) => result.status === "rejected");
+      if (failure?.status === "rejected") throw failure.reason;
+    }
   },
 
   deleteTransaction: async (id) => {
     const user = get().user;
     if (!user) return;
     await repo.remove(user.familyId, "transactions", id);
-    await get().refresh();
+    set((state) => ({ transactions: state.transactions.filter((t) => t.id !== id) }));
   },
 
   saveBudget: async ({ period, groupId, amount = 0, type = "expense", notes = null }) => {

@@ -8,3 +8,5 @@
 > Commits you push to the connected branch sync back to Lovable and show up in
 > the editor, so keep the branch in a working state.
 <!-- LOVABLE:END -->
+
+- Transaction mutations update the in-memory store only after Firebase confirms the write; avoid full-family refreshes on each entry to keep saving fast without reporting unsaved data as saved.
