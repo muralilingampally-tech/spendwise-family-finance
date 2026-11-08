@@ -15,6 +15,8 @@ export const Route = createFileRoute("/auth")({
       { title: "Sign in — SpendWise" },
       { name: "description", content: "Sign in to SpendWise to manage your family finances." },
       { property: "og:title", content: "Sign in — SpendWise" },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary_large_image" },
       { property: "og:description", content: "Secure sign in for your SpendWise account." },
     ],
   }),

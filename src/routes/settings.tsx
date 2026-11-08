@@ -12,6 +12,8 @@ export const Route = createFileRoute("/settings")({
       { title: "Settings — SpendWise" },
       { name: "description", content: "Manage your SpendWise profile, theme and backend status." },
       { property: "og:title", content: "Settings — SpendWise" },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary_large_image" },
       { property: "og:description", content: "Profile, appearance and backend configuration." },
     ],
   }),
