@@ -1,3 +1,4 @@
+/// <reference types="bun" />
 import { beforeEach, describe, expect, mock, test } from "bun:test";
 
 const list = mock(async () => []);
