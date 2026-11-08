@@ -28,6 +28,8 @@ export const Route = createFileRoute("/masters/$type")({
           "Manage expense groups, sub groups, income groups and payment sources for your family.",
       },
       { property: "og:title", content: "Masters — SpendWise" },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary_large_image" },
       { property: "og:description", content: "Category and payment source master data." },
     ],
   }),

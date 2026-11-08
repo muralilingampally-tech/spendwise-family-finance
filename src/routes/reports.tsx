@@ -31,6 +31,8 @@ export const Route = createFileRoute("/reports")({
           "Break down family income and expenses by group, sub group, payment source and any date range.",
       },
       { property: "og:title", content: "Reports — SpendWise" },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary_large_image" },
       {
         property: "og:description",
         content: "Monthly, yearly and custom-range reports for every group and payment source.",

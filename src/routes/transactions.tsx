@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useRef, useState, type ChangeEvent } from "react";
+import { useShallow } from "zustand/react/shallow";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { Download, Pencil, Plus, Trash2, Upload } from "lucide-react";
@@ -31,6 +32,8 @@ export const Route = createFileRoute("/transactions")({
       },
       { property: "og:title", content: "Transactions — SpendWise" },
       { property: "og:description", content: "Record and search every income and expense entry." },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary_large_image" },
     ],
   }),
   component: TransactionsPage,
@@ -124,7 +127,15 @@ function TransactionsPage() {
     bulkImportTransactions,
     deleteTransaction,
     user,
-  } = useApp();
+  } = useApp(useShallow((state) => ({
+    transactions: state.transactions,
+    masters: state.masters,
+    members: state.members,
+    saveTransaction: state.saveTransaction,
+    bulkImportTransactions: state.bulkImportTransactions,
+    deleteTransaction: state.deleteTransaction,
+    user: state.user,
+  })));
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Transaction | null>(null);
   const [busy, setBusy] = useState(false);
@@ -378,8 +389,10 @@ function TransactionsPage() {
     ];
     const gName = new Map(allGroups.map((g) => [g.id, g.name]));
     const subPairs: [string, string][] = allSubs
-      .filter((s) => s.parentId && gName.has(s.parentId))
-      .map((s) => [gName.get(s.parentId!)!, s.name]);
+      .flatMap((s) => {
+        const parentName = s.parentId ? gName.get(s.parentId) : undefined;
+        return parentName ? [[parentName, s.name] as [string, string]] : [];
+      });
     const subById = new Map(masters.expenseSubGroups.map((s) => [s.id, s]));
     const incTriples: [string, string, string][] = masters.expenseIncludes
       .map((i) => {

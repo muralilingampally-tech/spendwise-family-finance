@@ -29,6 +29,8 @@ export const Route = createFileRoute("/")({
         content: "See income, expenses and balance at a glance with monthly and category charts.",
       },
       { property: "og:title", content: "Dashboard — SpendWise" },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary_large_image" },
       {
         property: "og:description",
         content: "Income, expense and balance overview for your family finances.",
