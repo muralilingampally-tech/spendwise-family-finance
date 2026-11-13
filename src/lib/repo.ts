@@ -26,6 +26,8 @@ export interface Repo {
     data: Record<string, unknown>,
   ): Promise<void>;
   remove(familyId: string, collection: string, id: string): Promise<void>;
+  /** Writes a document under a known id, replacing any existing one. */
+  set(familyId: string, collection: string, id: string, data: Record<string, unknown>): Promise<void>;
 }
 
 /* ------------------------------ local fallback ----------------------------- */
@@ -67,6 +69,11 @@ const localRepo: Repo = {
       read(familyId, collection).filter((r) => r.id !== id),
     );
   },
+  async set(familyId, collection, id, data) {
+    const rows = read(familyId, collection).filter((r) => r.id !== id);
+    rows.push({ ...data, id } as Row);
+    write(familyId, collection, rows);
+  },
 };
 
 /* -------------------------------- firestore -------------------------------- */
@@ -89,6 +96,10 @@ const firestoreRepo: Repo = {
   async remove(familyId, collection, id) {
     const { db, mod } = await getFirestoreDb();
     await mod.deleteDoc(mod.doc(db, "families", familyId, collection, id));
+  },
+  async set(familyId, collection, id, data) {
+    const { db, mod } = await getFirestoreDb();
+    await mod.setDoc(mod.doc(db, "families", familyId, collection, id), data);
   },
 };
 
@@ -141,15 +152,11 @@ async function writeSeedVersion(familyId: string, version: number) {
   );
 }
 
-async function wipeCollection(familyId: string, collection: string) {
-  const rows = await repo.list(familyId, collection);
-  await Promise.all(rows.map((r) => repo.remove(familyId, collection, r.id)));
-}
-
 /**
- * Seeds master data for a new family, and reseeds once whenever SEED_VERSION
- * changes (the master structure was replaced, so stale rows and the entries
- * pointing at them are cleared first).
+ * Seeds master data for a new family. When SEED_VERSION is bumped on an
+ * existing workspace, starter masters that are missing are added alongside the
+ * existing ones. Nothing is ever deleted here: transactions, budgets and the
+ * user's own masters always survive a seed upgrade.
  */
 export async function seedFamilyMasters(familyId: string) {
   const version = await readSeedVersion(familyId);
@@ -162,29 +169,41 @@ export async function seedFamilyMasters(familyId: string) {
     return;
   }
 
-  if (version < SEED_VERSION) {
-    for (const c of [...MASTER_COLLECTIONS, "transactions", "budgets"]) {
-      await wipeCollection(familyId, c);
+  // Existing rows, indexed by collection + name + parent, so an upgrade only
+  // creates the starter masters the workspace does not already have.
+  const index = new Map<string, string>();
+  const indexKey = (collection: string, name: string, parentId: string | null) =>
+    `${collection}|${name.trim().toLowerCase()}|${parentId ?? ""}`;
+  if (existing.length > 0) {
+    for (const collection of MASTER_COLLECTIONS) {
+      const rows = (await repo.list(familyId, collection)) as unknown as MasterItem[];
+      for (const r of rows) index.set(indexKey(collection, r.name, r.parentId ?? null), r.id);
     }
   }
 
   const parents = new Map<string, string>();
   for (const row of buildSeedRows()) {
     const parentId = row.parentKey ? parents.get(row.parentKey) ?? null : null;
-    const created = await repo.create(familyId, row.collection, {
-      name: row.name,
-      parentId,
-      kind: row.kind ?? null,
-      active: true,
-      createdAt: now(),
-      updatedAt: now(),
-    });
+    const k = indexKey(row.collection, row.name, parentId);
+    let id = index.get(k);
+    if (!id) {
+      const created = await repo.create(familyId, row.collection, {
+        name: row.name,
+        parentId,
+        kind: row.kind ?? null,
+        active: true,
+        createdAt: now(),
+        updatedAt: now(),
+      });
+      id = created.id;
+      index.set(k, id);
+    }
     const grandParent = row.parentKey?.split(":")[1];
     const key =
       row.collection === "expenseSubGroups" && grandParent
         ? `${row.collection}:${grandParent} › ${row.name}`
         : `${row.collection}:${row.name}`;
-    parents.set(key, created.id);
+    parents.set(key, id);
   }
 
   await writeSeedVersion(familyId, SEED_VERSION);

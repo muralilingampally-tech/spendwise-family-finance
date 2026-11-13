@@ -1,10 +1,32 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState, type ChangeEvent } from "react";
+import { toast } from "sonner";
+import { Download, Upload } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
+import { Button } from "@/components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { useApp } from "@/lib/store";
 import { isFirebaseConfigured } from "@/lib/firebase";
+import { downloadBlob } from "@/lib/excel";
+import {
+  backupCounts,
+  backupFilename,
+  createBackup,
+  parseBackup,
+  restoreBackup,
+  type Backup,
+} from "@/lib/backup";
 
 export const Route = createFileRoute("/settings")({
   head: () => ({
@@ -62,6 +84,8 @@ function SettingsPage() {
           </div>
         </section>
 
+        <BackupSection />
+
         <section className="card-surface p-5">
           <h2 className="text-sm font-semibold">Backend</h2>
           <p className="mt-2 text-sm text-muted-foreground">
@@ -72,6 +96,117 @@ function SettingsPage() {
         </section>
       </div>
     </AppShell>
+  );
+}
+
+function BackupSection() {
+  const user = useApp((s) => s.user);
+  const refresh = useApp((s) => s.refresh);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [pending, setPending] = useState<Backup | null>(null);
+
+  const download = async () => {
+    if (!user) return;
+    setBusy("Preparing backup…");
+    try {
+      const backup = await createBackup(user.familyId);
+      const blob = new Blob([JSON.stringify(backup, null, 2)], { type: "application/json" });
+      downloadBlob(blob, backupFilename());
+      const c = backupCounts(backup);
+      toast.success(
+        `Backup saved: ${c.transactions} entries, ${c.budgets} budgets, ${c.masters} masters.`,
+      );
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not create the backup.");
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const pick = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    try {
+      setPending(parseBackup(await file.text()));
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not read the backup file.");
+    }
+  };
+
+  const restore = async () => {
+    if (!user || !pending) return;
+    const backup = pending;
+    setPending(null);
+    setBusy("Restoring…");
+    try {
+      const written = await restoreBackup(user.familyId, backup, (done, total) =>
+        setBusy(`Restoring… ${done}/${total}`),
+      );
+      await refresh();
+      toast.success(`Restored ${written} records.`);
+    } catch (error) {
+      await refresh().catch(() => {});
+      toast.error(
+        `Restore stopped: ${error instanceof Error ? error.message : "write failed"}. Records written so far are kept; restoring the same file again is safe.`,
+      );
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const counts = pending ? backupCounts(pending) : null;
+
+  return (
+    <section className="card-surface p-5">
+      <h2 className="text-sm font-semibold">Backup &amp; restore</h2>
+      <p className="mt-1 text-sm text-muted-foreground">
+        Download every entry, budget and master as one JSON file. Restoring puts those records back
+        under their original IDs. It never deletes anything and never creates duplicates.
+      </p>
+      <div className="mt-4 flex flex-wrap items-center gap-2">
+        <Button size="sm" onClick={download} disabled={!!busy}>
+          <Download className="h-4 w-4" /> Download backup
+        </Button>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => fileRef.current?.click()}
+          disabled={!!busy}
+        >
+          <Upload className="h-4 w-4" /> Restore from file
+        </Button>
+        <input
+          ref={fileRef}
+          type="file"
+          accept="application/json,.json"
+          className="hidden"
+          onChange={pick}
+        />
+        {busy && <span className="text-sm text-muted-foreground">{busy}</span>}
+      </div>
+
+      <AlertDialog open={!!pending} onOpenChange={(open) => !open && setPending(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Restore this backup?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {pending?.exportedAt
+                ? `Backup taken ${new Date(pending.exportedAt).toLocaleString()}. `
+                : ""}
+              It contains {counts?.transactions} entries, {counts?.budgets} budgets and{" "}
+              {counts?.masters} masters. Records with the same ID will be overwritten with the
+              backed-up version. Anything added since the backup stays as it is.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={restore}>Restore</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </section>
   );
 }
 
