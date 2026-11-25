@@ -4,6 +4,7 @@ import {
   Link,
   createRootRouteWithContext,
   useRouter,
+  useRouterState,
   HeadContent,
   Scripts,
 } from "@tanstack/react-router";
@@ -12,6 +13,7 @@ import { useEffect, type ReactNode } from "react";
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
 import { Toaster } from "@/components/ui/sonner";
+import { AppFrame } from "@/components/AppShell";
 
 function NotFoundComponent() {
   return (
@@ -136,11 +138,19 @@ function RootShell({ children }: { children: ReactNode }) {
 
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
+  const onAuthPage = useRouterState({ select: (s) => s.location.pathname === "/auth" });
 
   return (
     <QueryClientProvider client={queryClient}>
       {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
-      <Outlet />
+      {/* The frame stays mounted across tabs so only the page content below it swaps. */}
+      {onAuthPage ? (
+        <Outlet />
+      ) : (
+        <AppFrame>
+          <Outlet />
+        </AppFrame>
+      )}
       <Toaster position="top-right" richColors />
     </QueryClientProvider>
   );

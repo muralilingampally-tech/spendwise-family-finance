@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useRef, useState, type ChangeEvent } from "react";
 import { toast } from "sonner";
 import { Download, Upload } from "lucide-react";
-import { AppShell } from "@/components/AppShell";
+import { PageHeader } from "@/components/AppShell";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
@@ -44,7 +44,7 @@ export const Route = createFileRoute("/settings")({
 });
 
 function SettingsPage() {
-  const { user } = useApp();
+  const user = useApp((state) => state.user);
   const [dark, setDark] = useState(false);
 
   useEffect(() => {
@@ -60,7 +60,8 @@ function SettingsPage() {
   };
 
   return (
-    <AppShell title="Settings">
+    <>
+      <PageHeader title="Settings" />
       <div className="grid max-w-3xl gap-4">
         <section className="card-surface p-5">
           <h2 className="text-sm font-semibold">Profile</h2>
@@ -98,7 +99,7 @@ function SettingsPage() {
           </p>
         </section>
       </div>
-    </AppShell>
+    </>
   );
 }
 
@@ -143,9 +144,7 @@ function MembersSection() {
                   {m.displayName || m.email || "Unknown"}
                   {self && <span className="text-muted-foreground"> (you)</span>}
                 </div>
-                {m.email && (
-                  <div className="truncate text-xs text-muted-foreground">{m.email}</div>
-                )}
+                {m.email && <div className="truncate text-xs text-muted-foreground">{m.email}</div>}
               </div>
               {canManage && !self ? (
                 <select

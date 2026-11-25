@@ -2,7 +2,8 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { Copy, Save, TrendingUp } from "lucide-react";
 import { toast } from "sonner";
-import { AppShell } from "@/components/AppShell";
+import { PageHeader } from "@/components/AppShell";
+import { useShallow } from "zustand/react/shallow";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -41,7 +42,16 @@ const daysInMonth = (period: string) => {
 };
 
 function BudgetPage() {
-  const { masters, transactions, budgets, saveBudget, saveBudgets, user } = useApp();
+  const { masters, transactions, budgets, saveBudget, saveBudgets, user } = useApp(
+    useShallow((state) => ({
+      masters: state.masters,
+      transactions: state.transactions,
+      budgets: state.budgets,
+      saveBudget: state.saveBudget,
+      saveBudgets: state.saveBudgets,
+      user: state.user,
+    })),
+  );
   const canWrite = can(user?.role, "write");
   const [period, setPeriod] = useState(() => todayISO().slice(0, 7));
   const [type, setType] = useState<TransactionType>("expense");
@@ -171,21 +181,27 @@ function BudgetPage() {
   };
 
   return (
-    <AppShell
-      title="Budget vs Actual"
-      actions={
-        <div className="flex flex-wrap gap-2">
-          <Button size="sm" variant="outline" onClick={copyPrevious} disabled={!canWrite || saving !== null}>
-            <Copy className="mr-2 h-4 w-4" />
-            Copy {monthLabel(prev)}
-          </Button>
-          <Button size="sm" onClick={saveAll} disabled={!canWrite || saving !== null}>
-            <Save className="mr-2 h-4 w-4" />
-            {saving === "all" ? "Saving…" : "Save all"}
-          </Button>
-        </div>
-      }
-    >
+    <>
+      <PageHeader
+        title="Budget vs Actual"
+        actions={
+          <div className="flex flex-wrap gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={copyPrevious}
+              disabled={!canWrite || saving !== null}
+            >
+              <Copy className="mr-2 h-4 w-4" />
+              Copy {monthLabel(prev)}
+            </Button>
+            <Button size="sm" onClick={saveAll} disabled={!canWrite || saving !== null}>
+              <Save className="mr-2 h-4 w-4" />
+              {saving === "all" ? "Saving…" : "Save all"}
+            </Button>
+          </div>
+        }
+      />
       <section className="card-surface p-5">
         <div className="grid gap-3 sm:grid-cols-3">
           <div className="space-y-1.5">
@@ -262,9 +278,7 @@ function BudgetPage() {
                         placeholder="0"
                         disabled={!canWrite}
                         value={drafts[r.id] ?? ""}
-                        onChange={(e) =>
-                          setDrafts((d) => ({ ...d, [r.id]: e.target.value }))
-                        }
+                        onChange={(e) => setDrafts((d) => ({ ...d, [r.id]: e.target.value }))}
                         onBlur={() => {
                           if (Number(drafts[r.id] || 0) !== r.budget) void save(r.id);
                         }}
@@ -295,11 +309,7 @@ function BudgetPage() {
                         <div className="h-2 w-24 overflow-hidden rounded-full bg-muted">
                           <div
                             className={`h-full rounded-full ${
-                              over
-                                ? "bg-destructive"
-                                : risky
-                                  ? "bg-chart-4"
-                                  : "bg-primary"
+                              over ? "bg-destructive" : risky ? "bg-chart-4" : "bg-primary"
                             }`}
                             style={{ width: `${Math.min(100, Math.round(r.used))}%` }}
                           />
@@ -345,9 +355,7 @@ function BudgetPage() {
                   <td className="num px-3 py-3 text-right">{inr(grand.actual)}</td>
                   <td className="num px-3 py-3 text-right">{inr(grand.forecast)}</td>
                   <td className="num px-3 py-3 text-right">{inr(grand.budget - grand.actual)}</td>
-                  <td className="num px-3 py-3 text-right">
-                    {inr(grand.budget - grand.forecast)}
-                  </td>
+                  <td className="num px-3 py-3 text-right">{inr(grand.budget - grand.forecast)}</td>
                   <td className="px-5 py-3" />
                   <td className="px-3 py-3" />
                 </tr>
@@ -356,11 +364,11 @@ function BudgetPage() {
           </table>
         </div>
         <p className="border-t border-border px-5 py-3 text-xs text-muted-foreground">
-          Forecast projects the month-end total from the pace so far (actual ÷ days elapsed ×
-          days in month). “At risk” means you are within budget today but on pace to cross it.
+          Forecast projects the month-end total from the pace so far (actual ÷ days elapsed × days
+          in month). “At risk” means you are within budget today but on pace to cross it.
         </p>
       </section>
-    </AppShell>
+    </>
   );
 }
 

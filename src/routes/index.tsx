@@ -11,14 +11,15 @@ import {
   YAxis,
 } from "recharts";
 import { ArrowDownRight, ArrowUpRight, PiggyBank, Scale } from "lucide-react";
-import { AppShell } from "@/components/AppShell";
+import { PageHeader } from "@/components/AppShell";
+import { useShallow } from "zustand/react/shallow";
+import { useAfterPaint } from "@/lib/perf";
 import { Button } from "@/components/ui/button";
 import { TxnDrilldown } from "@/components/TxnDrilldown";
 import { useApp } from "@/lib/store";
 import { signedInvestment } from "@/lib/investment";
 import { inr, monthKey, monthLabel, shortDate } from "@/lib/format";
 import type { Transaction } from "@/lib/types";
-
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -41,8 +42,21 @@ export const Route = createFileRoute("/")({
 });
 
 function Dashboard() {
-  const { transactions: allTransactions, masters, members, user } = useApp();
+  const {
+    transactions: allTransactions,
+    masters,
+    members,
+    user,
+  } = useApp(
+    useShallow((state) => ({
+      transactions: state.transactions,
+      masters: state.masters,
+      members: state.members,
+      user: state.user,
+    })),
+  );
   const [drill, setDrill] = useState<{ title: string; txns: Transaction[] } | null>(null);
+  const painted = useAfterPaint();
 
   const currentMonth = useMemo(() => monthKey(new Date().toISOString()), []);
   const transactions = useMemo(
@@ -67,7 +81,10 @@ function Dashboard() {
   }, [members, user, transactions]);
 
   const byUser = useMemo(() => {
-    const map = new Map<string, { name: string; Income: number; Expense: number; Investment: number }>();
+    const map = new Map<
+      string,
+      { name: string; Income: number; Expense: number; Investment: number }
+    >();
     transactions.forEach((t) => {
       const name = memberName(t);
       const row = map.get(name) ?? { name, Income: 0, Expense: 0, Investment: 0 };
@@ -120,14 +137,15 @@ function Dashboard() {
   }, [transactions, nameOf]);
 
   return (
-    <AppShell
-      title={`Dashboard — ${monthLabel(currentMonth)}`}
-      actions={
-        <Button asChild size="sm">
-          <Link to="/transactions">Add transaction</Link>
-        </Button>
-      }
-    >
+    <>
+      <PageHeader
+        title={`Dashboard — ${monthLabel(currentMonth)}`}
+        actions={
+          <Button asChild size="sm">
+            <Link to="/transactions">Add transaction</Link>
+          </Button>
+        }
+      />
       <p className="mb-4 text-sm text-muted-foreground">
         Showing {monthLabel(currentMonth)} only. For other months or custom ranges, use{" "}
         <Link to="/reports" className="text-primary hover:underline">
@@ -166,6 +184,8 @@ function Dashboard() {
           <div className="mt-4 h-72">
             {monthly.length === 0 ? (
               <Empty />
+            ) : !painted ? (
+              <div className="h-full w-full animate-pulse rounded-lg bg-muted/40" />
             ) : (
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={monthly}>
@@ -191,9 +211,9 @@ function Dashboard() {
 
         <section className="card-surface p-5 lg:col-span-2">
           <h2 className="text-sm font-semibold">Expense by group (this month)</h2>
-      <p className="mt-3 text-xs text-muted-foreground">
-        Tap an amount to see the entries behind it.
-      </p>
+          <p className="mt-3 text-xs text-muted-foreground">
+            Tap an amount to see the entries behind it.
+          </p>
           <div className="mt-4 h-72 overflow-auto">
             {byCategory.length === 0 ? (
               <Empty />
@@ -213,7 +233,9 @@ function Dashboard() {
                       onClick={() =>
                         setDrill({
                           title: `${c.name} — ${monthLabel(currentMonth)}`,
-                          txns: transactions.filter((t) => t.type === "expense" && t.groupId === c.id),
+                          txns: transactions.filter(
+                            (t) => t.type === "expense" && t.groupId === c.id,
+                          ),
                         })
                       }
                     >
@@ -240,7 +262,6 @@ function Dashboard() {
             )}
           </div>
         </section>
-
       </div>
 
       <section className="card-surface mt-6 overflow-hidden">
@@ -265,7 +286,9 @@ function Dashboard() {
                   <td className="num px-5 py-3 text-right text-success">{inr(r.Income)}</td>
                   <td className="num px-5 py-3 text-right text-destructive">{inr(r.Expense)}</td>
                   <td className="num px-5 py-3 text-right">{inr(r.Investment)}</td>
-                  <td className="num px-5 py-3 text-right font-medium">{inr(r.Income - r.Expense)}</td>
+                  <td className="num px-5 py-3 text-right font-medium">
+                    {inr(r.Income - r.Expense)}
+                  </td>
                 </tr>
               ))}
               {byUser.length === 0 && (
@@ -350,7 +373,7 @@ function Dashboard() {
           onClose={() => setDrill(null)}
         />
       )}
-    </AppShell>
+    </>
   );
 }
 
@@ -380,7 +403,9 @@ function StatCard({
           <Icon className="h-5 w-5" />
         </span>
         <div>
-          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{label}</p>
+          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+            {label}
+          </p>
           <p className="num mt-0.5 text-2xl font-bold tracking-tight">{inr(value)}</p>
         </div>
       </div>

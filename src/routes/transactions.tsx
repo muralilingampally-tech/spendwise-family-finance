@@ -4,7 +4,7 @@ import { useShallow } from "zustand/react/shallow";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { Download, Pencil, Plus, Trash2, Upload } from "lucide-react";
-import { AppShell } from "@/components/AppShell";
+import { PageHeader } from "@/components/AppShell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -90,7 +90,11 @@ const emptyValues: FormValues = {
 const selectClass =
   "h-9 w-full rounded-md border border-input bg-background px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring";
 
-const normalizeHeader = (value: string) => value.trim().toLowerCase().replace(/[^a-z0-9]+/g, "");
+const normalizeHeader = (value: string) =>
+  value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "");
 
 function parseCsvRecords(text: string): string[][] {
   const records: string[][] = [];
@@ -151,17 +155,19 @@ function TransactionsPage() {
     restoreTransaction,
     recurring,
     user,
-  } = useApp(useShallow((state) => ({
-    transactions: state.transactions,
-    masters: state.masters,
-    members: state.members,
-    saveTransaction: state.saveTransaction,
-    bulkImportTransactions: state.bulkImportTransactions,
-    deleteTransaction: state.deleteTransaction,
-    restoreTransaction: state.restoreTransaction,
-    recurring: state.recurring,
-    user: state.user,
-  })));
+  } = useApp(
+    useShallow((state) => ({
+      transactions: state.transactions,
+      masters: state.masters,
+      members: state.members,
+      saveTransaction: state.saveTransaction,
+      bulkImportTransactions: state.bulkImportTransactions,
+      deleteTransaction: state.deleteTransaction,
+      restoreTransaction: state.restoreTransaction,
+      recurring: state.recurring,
+      user: state.user,
+    })),
+  );
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Transaction | null>(null);
   const [busy, setBusy] = useState(false);
@@ -246,10 +252,7 @@ function TransactionsPage() {
     [masters.paymentSources],
   );
 
-  const allMemberNames = useMemo(
-    () => memberOptions.map((m) => m.name),
-    [memberOptions],
-  );
+  const allMemberNames = useMemo(() => memberOptions.map((m) => m.name), [memberOptions]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -274,7 +277,18 @@ function TransactionsPage() {
         .toLowerCase()
         .includes(q);
     });
-  }, [transactions, search, typeFilter, from, to, groupFilter, sourceFilter, userFilter, nameOf, memberName]);
+  }, [
+    transactions,
+    search,
+    typeFilter,
+    from,
+    to,
+    groupFilter,
+    sourceFilter,
+    userFilter,
+    nameOf,
+    memberName,
+  ]);
 
   const totals = useMemo(() => {
     let income = 0;
@@ -298,7 +312,13 @@ function TransactionsPage() {
       ? (last.paymentSourceId as string)
       : "";
     // A fresh date each time: the page may have been open since yesterday.
-    form.reset({ ...emptyValues, date: todayISO(), type, paymentSourceId, createdBy: user?.uid ?? "" });
+    form.reset({
+      ...emptyValues,
+      date: todayISO(),
+      type,
+      paymentSourceId,
+      createdBy: user?.uid ?? "",
+    });
     setOpen(true);
   };
 
@@ -335,7 +355,7 @@ function TransactionsPage() {
           groupId: values.groupId,
           subGroupId: values.subGroupId || null,
           includesId: values.type === "expense" ? values.includesId || null : null,
-          necessity: values.type === "expense" ? (values.necessity || null) : null,
+          necessity: values.type === "expense" ? values.necessity || null : null,
           paymentSourceId: values.paymentSourceId,
           amount,
           remarks: values.remarks.trim().slice(0, 500),
@@ -433,7 +453,9 @@ function TransactionsPage() {
     const csv = [
       ...helperLines,
       header.join(","),
-      ...exampleRows.map((row) => row.map((value) => `"${String(value).replace(/"/g, '""')}"`).join(",")),
+      ...exampleRows.map((row) =>
+        row.map((value) => `"${String(value).replace(/"/g, '""')}"`).join(","),
+      ),
     ].join("\n");
 
     void csv;
@@ -442,18 +464,21 @@ function TransactionsPage() {
   };
 
   const excelLists = () => {
-    const allGroups = [...masters.expenseGroups, ...masters.incomeGroups, ...masters.investmentGroups];
+    const allGroups = [
+      ...masters.expenseGroups,
+      ...masters.incomeGroups,
+      ...masters.investmentGroups,
+    ];
     const allSubs = [
       ...masters.expenseSubGroups,
       ...masters.incomeSubGroups,
       ...masters.investmentSubGroups,
     ];
     const gName = new Map(allGroups.map((g) => [g.id, g.name]));
-    const subPairs: [string, string][] = allSubs
-      .flatMap((s) => {
-        const parentName = s.parentId ? gName.get(s.parentId) : undefined;
-        return parentName ? [[parentName, s.name] as [string, string]] : [];
-      });
+    const subPairs: [string, string][] = allSubs.flatMap((s) => {
+      const parentName = s.parentId ? gName.get(s.parentId) : undefined;
+      return parentName ? [[parentName, s.name] as [string, string]] : [];
+    });
     const subById = new Map(masters.expenseSubGroups.map((s) => [s.id, s]));
     const incTriples: [string, string, string][] = masters.expenseIncludes
       .map((i) => {
@@ -497,9 +522,9 @@ function TransactionsPage() {
     try {
       setImporting(true);
       const isXlsx = /\.xlsx$/i.test(file.name);
-      const rows = (isXlsx ? await readWorkbookRows(file) : parseCsvRecords(await file.text())).filter(
-        (record) => record.some((value) => value.trim() !== ""),
-      );
+      const rows = (
+        isXlsx ? await readWorkbookRows(file) : parseCsvRecords(await file.text())
+      ).filter((record) => record.some((value) => value.trim() !== ""));
       const dataRows = rows.filter((record) => !record[0].trim().startsWith("#"));
       if (dataRows.length < 2) throw new Error("This file does not contain any transaction rows.");
 
@@ -519,9 +544,7 @@ function TransactionsPage() {
       const remarksIndex = findColumn(["remarks"]);
       const entryByIndex = header.findIndex((value) => value === "entryby");
       const includesIndex = header.findIndex((value) => value === "includes");
-      const necessityIndex = header.findIndex(
-        (value) => value === "necessity" || value === "tag",
-      );
+      const necessityIndex = header.findIndex((value) => value === "necessity" || value === "tag");
 
       const groupLookup = new Map<string, string>();
       masters.expenseGroups.forEach((item) => {
@@ -569,8 +592,8 @@ function TransactionsPage() {
         const paymentSourceName = record[paymentSourceIndex]?.trim();
         const amount = Number(record[amountIndex]?.trim());
         const remarks = record[remarksIndex]?.trim() ?? "";
-        const entryByName = entryByIndex >= 0 ? record[entryByIndex]?.trim() ?? "" : "";
-        const includesName = includesIndex >= 0 ? record[includesIndex]?.trim() ?? "" : "";
+        const entryByName = entryByIndex >= 0 ? (record[entryByIndex]?.trim() ?? "") : "";
+        const includesName = includesIndex >= 0 ? (record[includesIndex]?.trim() ?? "") : "";
         const necessityRaw =
           necessityIndex >= 0 ? (record[necessityIndex]?.trim().toLowerCase() ?? "") : "";
 
@@ -589,28 +612,34 @@ function TransactionsPage() {
 
         const groupId = groupLookup.get(`${type}:${groupName.trim().toLowerCase()}`);
         if (!groupId) {
-          throw new Error(`Row ${row}: group "${groupName}" was not found in your configured ${type} masters.`);
+          throw new Error(
+            `Row ${row}: group "${groupName}" was not found in your configured ${type} masters.`,
+          );
         }
 
         const paymentSourceId = paymentSourceLookup.get(paymentSourceName.trim().toLowerCase());
         if (!paymentSourceId) {
-          throw new Error(`Row ${row}: payment source "${paymentSourceName}" was not found in your configured masters.`);
+          throw new Error(
+            `Row ${row}: payment source "${paymentSourceName}" was not found in your configured masters.`,
+          );
         }
 
         const subGroupId = subGroupName
-          ? subGroupLookup.get(`${type}:${subGroupName.trim().toLowerCase()}`) ?? null
+          ? (subGroupLookup.get(`${type}:${subGroupName.trim().toLowerCase()}`) ?? null)
           : null;
 
         const createdBy = entryByName
-          ? memberLookup.get(entryByName.trim().toLowerCase()) ?? user?.uid ?? ""
-          : user?.uid ?? "";
+          ? (memberLookup.get(entryByName.trim().toLowerCase()) ?? user?.uid ?? "")
+          : (user?.uid ?? "");
 
         return {
           date,
           type,
           groupId,
           subGroupId,
-          includesId: includesName ? includesLookup.get(includesName.toLowerCase()) ?? null : null,
+          includesId: includesName
+            ? (includesLookup.get(includesName.toLowerCase()) ?? null)
+            : null,
           necessity:
             necessityRaw === "essential" || necessityRaw === "discretionary"
               ? (necessityRaw as Necessity)
@@ -668,36 +697,48 @@ function TransactionsPage() {
   };
 
   return (
-    <AppShell
-      title="Transactions"
-      actions={
-        <div className="flex flex-wrap gap-2">
-          <Button size="sm" variant="outline" onClick={exportTemplate}>
-            <Download className="mr-1 h-4 w-4" /> Excel template
-          </Button>
-          <Button size="sm" variant="outline" onClick={exportExcel} disabled={filtered.length === 0}>
-            <Download className="mr-1 h-4 w-4" /> Export Excel
-          </Button>
-          {canWrite && (
-            <Button size="sm" variant="outline" onClick={() => fileInputRef.current?.click()} disabled={importing}>
-              <Upload className="mr-1 h-4 w-4" /> {importing ? "Importing…" : "Import Excel / CSV"}
+    <>
+      <PageHeader
+        title="Transactions"
+        actions={
+          <div className="flex flex-wrap gap-2">
+            <Button size="sm" variant="outline" onClick={exportTemplate}>
+              <Download className="mr-1 h-4 w-4" /> Excel template
             </Button>
-          )}
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".xlsx,.csv,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            className="hidden"
-            onChange={importCsv}
-          />
-          {canWrite && (
-            <Button size="sm" onClick={openNew}>
-              <Plus className="mr-1 h-4 w-4" /> New
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={exportExcel}
+              disabled={filtered.length === 0}
+            >
+              <Download className="mr-1 h-4 w-4" /> Export Excel
             </Button>
-          )}
-        </div>
-      }
-    >
+            {canWrite && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={importing}
+              >
+                <Upload className="mr-1 h-4 w-4" />{" "}
+                {importing ? "Importing…" : "Import Excel / CSV"}
+              </Button>
+            )}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".xlsx,.csv,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+              className="hidden"
+              onChange={importCsv}
+            />
+            {canWrite && (
+              <Button size="sm" onClick={openNew}>
+                <Plus className="mr-1 h-4 w-4" /> New
+              </Button>
+            )}
+          </div>
+        }
+      />
       {canWrite && dueCount > 0 && (
         <Link
           to="/recurring"
@@ -735,11 +776,13 @@ function TransactionsPage() {
           onChange={(e) => setGroupFilter(e.target.value)}
         >
           <option value="">All categories</option>
-          {[...masters.expenseGroups, ...masters.incomeGroups, ...masters.investmentGroups].map((g) => (
-            <option key={g.id} value={g.id}>
-              {g.name}
-            </option>
-          ))}
+          {[...masters.expenseGroups, ...masters.incomeGroups, ...masters.investmentGroups].map(
+            (g) => (
+              <option key={g.id} value={g.id}>
+                {g.name}
+              </option>
+            ),
+          )}
         </select>
         <select
           className={selectClass}
@@ -775,7 +818,7 @@ function TransactionsPage() {
         <span>{filtered.length} entries</span>
         <span className="text-success">Income {inr(totals.income)}</span>
         <span className="text-destructive">Expense {inr(totals.expense)}</span>
-          <span className="text-primary">Investments (net) {inr(totals.investment)}</span>
+        <span className="text-primary">Investments (net) {inr(totals.investment)}</span>
       </div>
 
       <section className="card-surface mt-4 overflow-x-auto">
@@ -808,7 +851,9 @@ function TransactionsPage() {
                 <td className="px-4 py-3 capitalize text-muted-foreground">{t.necessity ?? "—"}</td>
                 <td className="px-4 py-3">{nameOf(t.paymentSourceId)}</td>
                 <td className="whitespace-nowrap px-4 py-3">{memberName(t)}</td>
-                <td className="max-w-[16rem] truncate px-4 py-3 text-muted-foreground">{t.remarks}</td>
+                <td className="max-w-[16rem] truncate px-4 py-3 text-muted-foreground">
+                  {t.remarks}
+                </td>
                 <td
                   className={`num px-4 py-3 text-right font-medium ${
                     t.type === "income" ? "text-success" : "text-destructive"
@@ -819,7 +864,12 @@ function TransactionsPage() {
                 <td className="px-4 py-3">
                   <div className="flex justify-end gap-1">
                     {canWrite && (
-                      <Button size="icon" variant="ghost" onClick={() => openEdit(t)} aria-label="Edit">
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        onClick={() => openEdit(t)}
+                        aria-label="Edit"
+                      >
                         <Pencil className="h-4 w-4" />
                       </Button>
                     )}
@@ -887,7 +937,11 @@ function TransactionsPage() {
                     ? "Investment group"
                     : "Expense group"}
               </Label>
-              <select id="groupId" className={selectClass} {...form.register("groupId", { required: true })}>
+              <select
+                id="groupId"
+                className={selectClass}
+                {...form.register("groupId", { required: true })}
+              >
                 <option value="">Select…</option>
                 {groups.map((g) => (
                   <option key={g.id} value={g.id}>
@@ -974,7 +1028,12 @@ function TransactionsPage() {
             </div>
             <div className="space-y-1.5 sm:col-span-2">
               <Label htmlFor="remarks">Remarks</Label>
-              <Input id="remarks" maxLength={500} placeholder="Optional note" {...form.register("remarks")} />
+              <Input
+                id="remarks"
+                maxLength={500}
+                placeholder="Optional note"
+                {...form.register("remarks")}
+              />
             </div>
             <DialogFooter className="sm:col-span-2">
               <Button type="button" variant="outline" onClick={() => setOpen(false)}>
@@ -987,6 +1046,6 @@ function TransactionsPage() {
           </form>
         </DialogContent>
       </Dialog>
-    </AppShell>
+    </>
   );
 }

@@ -2,7 +2,8 @@ import { createFileRoute, Link, useParams } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Pencil, Plus, Trash2 } from "lucide-react";
-import { AppShell } from "@/components/AppShell";
+import { PageHeader } from "@/components/AppShell";
+import { useShallow } from "zustand/react/shallow";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -45,7 +46,16 @@ const selectClass =
 function MastersPage() {
   const { type } = useParams({ from: "/masters/$type" });
   const collection = MASTER_SLUGS[type] ?? "expenseGroups";
-  const { masters, saveMaster, deleteMaster, user, transactions, budgets } = useApp();
+  const { masters, saveMaster, deleteMaster, user, transactions, budgets } = useApp(
+    useShallow((state) => ({
+      masters: state.masters,
+      saveMaster: state.saveMaster,
+      deleteMaster: state.deleteMaster,
+      user: state.user,
+      transactions: state.transactions,
+      budgets: state.budgets,
+    })),
+  );
 
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<MasterItem | null>(null);
@@ -138,16 +148,17 @@ function MastersPage() {
   };
 
   return (
-    <AppShell
-      title="Master Data"
-      actions={
-        isAdmin ? (
-          <Button size="sm" onClick={openNew}>
-            <Plus className="mr-1 h-4 w-4" /> New
-          </Button>
-        ) : null
-      }
-    >
+    <>
+      <PageHeader
+        title="Master Data"
+        actions={
+          isAdmin ? (
+            <Button size="sm" onClick={openNew}>
+              <Plus className="mr-1 h-4 w-4" /> New
+            </Button>
+          ) : null
+        }
+      />
       <div className="flex flex-wrap gap-2">
         {TABS.map(([slug, key]) => (
           <Link
@@ -188,13 +199,22 @@ function MastersPage() {
             {rows.map((item) => (
               <tr key={item.id} className="border-t border-border">
                 <td className="px-4 py-3 font-medium">{item.name}</td>
-                {isSub && <td className="px-4 py-3 text-muted-foreground">{parentName(item.parentId)}</td>}
-                {isSource && <td className="px-4 py-3 text-muted-foreground">{item.kind ?? "—"}</td>}
+                {isSub && (
+                  <td className="px-4 py-3 text-muted-foreground">{parentName(item.parentId)}</td>
+                )}
+                {isSource && (
+                  <td className="px-4 py-3 text-muted-foreground">{item.kind ?? "—"}</td>
+                )}
                 <td className="px-4 py-3">
                   <div className="flex justify-end gap-1">
                     {isAdmin && (
                       <>
-                        <Button size="icon" variant="ghost" aria-label="Edit" onClick={() => openEdit(item)}>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          aria-label="Edit"
+                          onClick={() => openEdit(item)}
+                        >
                           <Pencil className="h-4 w-4" />
                         </Button>
                         <Button
@@ -284,6 +304,6 @@ function MastersPage() {
           </form>
         </DialogContent>
       </Dialog>
-    </AppShell>
+    </>
   );
 }

@@ -11,7 +11,9 @@ import {
   YAxis,
 } from "recharts";
 import { ChevronRight, Download } from "lucide-react";
-import { AppShell } from "@/components/AppShell";
+import { PageHeader } from "@/components/AppShell";
+import { useShallow } from "zustand/react/shallow";
+import { useAfterPaint } from "@/lib/perf";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -76,7 +78,14 @@ const PRESETS: { key: Preset; label: string }[] = [
 ];
 
 function ReportsPage() {
-  const { transactions, masters, members, user } = useApp();
+  const { transactions, masters, members, user } = useApp(
+    useShallow((state) => ({
+      transactions: state.transactions,
+      masters: state.masters,
+      members: state.members,
+      user: state.user,
+    })),
+  );
   const [preset, setPreset] = useState<Preset>("month");
   const [custom, setCustom] = useState({ from: todayISO().slice(0, 8) + "01", to: todayISO() });
   const [type, setType] = useState<"all" | TransactionType>("all");
@@ -85,6 +94,7 @@ function ReportsPage() {
   const [userFilter, setUserFilter] = useState("");
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [drill, setDrill] = useState<{ title: string; txns: Transaction[] } | null>(null);
+  const painted = useAfterPaint();
 
   const range = preset === "custom" ? custom : rangeFor(preset);
 
@@ -139,8 +149,7 @@ function ReportsPage() {
         const signed = signedInvestment(nameOf(t.subGroupId), Number(t.amount));
         if (signed >= 0) realized += signed;
         else invested += -signed;
-      }
-      else expense += Number(t.amount);
+      } else expense += Number(t.amount);
     });
     return {
       income,
@@ -168,7 +177,10 @@ function ReportsPage() {
   };
 
   const breakdown = useMemo(() => {
-    const map = new Map<string, { label: string; Income: number; Expense: number; Investment: number }>();
+    const map = new Map<
+      string,
+      { label: string; Income: number; Expense: number; Investment: number }
+    >();
     rows.forEach((t) => {
       const k = keyFor(t);
       const row = map.get(k) ?? { label: k, Income: 0, Expense: 0, Investment: 0 };
@@ -210,34 +222,36 @@ function ReportsPage() {
     >();
     rows.forEach((t) => {
       const gid = t.groupId || "none";
-      const group =
-        map.get(gid) ??
-        { id: gid, label: nameOf(t.groupId), income: 0, expense: 0, investment: 0, count: 0, subs: new Map() };
+      const group = map.get(gid) ?? {
+        id: gid,
+        label: nameOf(t.groupId),
+        income: 0,
+        expense: 0,
+        investment: 0,
+        count: 0,
+        subs: new Map(),
+      };
       const sid = t.subGroupId || "none";
-      const sub =
-        group.subs.get(sid) ??
-        {
-          id: `${gid}-${sid}`,
-          label: nameOf(t.subGroupId),
-          income: 0,
-          expense: 0,
-          investment: 0,
-          count: 0,
-          items: new Map<string, Leaf>(),
-        };
+      const sub = group.subs.get(sid) ?? {
+        id: `${gid}-${sid}`,
+        label: nameOf(t.subGroupId),
+        income: 0,
+        expense: 0,
+        investment: 0,
+        count: 0,
+        items: new Map<string, Leaf>(),
+      };
       // Third level only exists when there is a real Includes master item.
       // Memos are not shown as rows here — they appear in the drilldown modal.
       const iid = t.includesId || "none";
-      const item =
-        sub.items.get(iid) ??
-        {
-          id: iid,
-          label: t.includesId ? nameOf(t.includesId) : "",
-          income: 0,
-          expense: 0,
-          investment: 0,
-          count: 0,
-        };
+      const item = sub.items.get(iid) ?? {
+        id: iid,
+        label: t.includesId ? nameOf(t.includesId) : "",
+        income: 0,
+        expense: 0,
+        investment: 0,
+        count: 0,
+      };
       const amount = Number(t.amount);
       if (t.type === "income") {
         group.income += amount;
@@ -277,7 +291,10 @@ function ReportsPage() {
   }, [rows, nameOf]);
 
   const trend = useMemo(() => {
-    const map = new Map<string, { key: string; Income: number; Expense: number; Investment: number }>();
+    const map = new Map<
+      string,
+      { key: string; Income: number; Expense: number; Investment: number }
+    >();
     rows.forEach((t) => {
       const k = monthKey(t.date);
       const row = map.get(k) ?? { key: k, Income: 0, Expense: 0, Investment: 0 };
@@ -334,15 +351,16 @@ function ReportsPage() {
   };
 
   return (
-    <AppShell
-      title="Reports"
-      actions={
-        <Button size="sm" variant="outline" onClick={exportCsv} disabled={rows.length === 0}>
-          <Download className="mr-2 h-4 w-4" />
-          Export CSV
-        </Button>
-      }
-    >
+    <>
+      <PageHeader
+        title="Reports"
+        actions={
+          <Button size="sm" variant="outline" onClick={exportCsv} disabled={rows.length === 0}>
+            <Download className="mr-2 h-4 w-4" />
+            Export CSV
+          </Button>
+        }
+      />
       <section className="card-surface p-5">
         <div className="flex flex-wrap gap-2">
           {PRESETS.map((p) => (
@@ -471,6 +489,8 @@ function ReportsPage() {
               <div className="grid h-full place-items-center text-sm text-muted-foreground">
                 Nothing to plot yet.
               </div>
+            ) : !painted ? (
+              <div className="h-full w-full animate-pulse rounded-lg bg-muted/40" />
             ) : (
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={trend}>
@@ -486,10 +506,35 @@ function ReportsPage() {
                     }}
                   />
                   <Legend />
-                  <Line type="monotone" dataKey="Income" stroke="var(--chart-3)" strokeWidth={2} dot={false} />
-                  <Line type="monotone" dataKey="Expense" stroke="var(--chart-2)" strokeWidth={2} dot={false} />
-                  <Line type="monotone" dataKey="Investment" stroke="var(--chart-1)" strokeWidth={2} dot={false} />
-                  <Line type="monotone" dataKey="Net" stroke="var(--chart-4)" strokeWidth={2} strokeDasharray="4 4" dot={false} />
+                  <Line
+                    type="monotone"
+                    dataKey="Income"
+                    stroke="var(--chart-3)"
+                    strokeWidth={2}
+                    dot={false}
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="Expense"
+                    stroke="var(--chart-2)"
+                    strokeWidth={2}
+                    dot={false}
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="Investment"
+                    stroke="var(--chart-1)"
+                    strokeWidth={2}
+                    dot={false}
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="Net"
+                    stroke="var(--chart-4)"
+                    strokeWidth={2}
+                    strokeDasharray="4 4"
+                    dot={false}
+                  />
                 </LineChart>
               </ResponsiveContainer>
             )}
@@ -541,87 +586,109 @@ function ReportsPage() {
                     <td className="num px-3 py-3 text-right text-muted-foreground">{g.count}</td>
                     <td className="num px-3 py-3 text-right text-success">{inr(g.income)}</td>
                     <td className="num px-3 py-3 text-right text-destructive">{inr(g.expense)}</td>
-                    <td className={`num px-3 py-3 text-right ${g.investment < 0 ? "text-destructive" : g.investment > 0 ? "text-success" : ""}`}>
+                    <td
+                      className={`num px-3 py-3 text-right ${g.investment < 0 ? "text-destructive" : g.investment > 0 ? "text-success" : ""}`}
+                    >
                       {inr(g.investment)}
                     </td>
-                    <td className="num px-3 py-3 text-right font-medium">{inr(g.income - g.expense)}</td>
+                    <td className="num px-3 py-3 text-right font-medium">
+                      {inr(g.income - g.expense)}
+                    </td>
                     <td className="num px-5 py-3 text-right text-muted-foreground">
-                      {totals.expense > 0 ? `${((g.expense / totals.expense) * 100).toFixed(1)}%` : "—"}
+                      {totals.expense > 0
+                        ? `${((g.expense / totals.expense) * 100).toFixed(1)}%`
+                        : "—"}
                     </td>
                   </tr>
                   {expanded[g.id] &&
                     g.subRows.map((s) => (
                       <Fragment key={s.id}>
-                      <tr
-                        className="cursor-pointer border-t border-border/60 bg-muted/20 hover:bg-muted/40"
-                        onClick={() =>
-                          openDrill(
-                            `${g.label} › ${s.label}`,
-                            (t) =>
-                              (t.groupId || "none") === g.id &&
-                              (t.subGroupId || "none") === s.id.slice(g.id.length + 1),
-                          )
-                        }
-                      >
-                        <td className="px-5 py-2.5 pl-12 text-muted-foreground">
-                          {s.itemRows.length > 0 ? (
-                            <button
-                              className="flex items-center gap-1.5"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setExpanded((st) => ({ ...st, [s.id]: !st[s.id] }));
-                              }}
-                            >
-                              <ChevronRight
-                                className={`h-3.5 w-3.5 transition-transform ${expanded[s.id] ? "rotate-90" : ""}`}
-                              />
-                              {s.label}
-                            </button>
-                          ) : (
-                            <span className="pl-5">{s.label}</span>
-                          )}
-                        </td>
-                        <td className="num px-3 py-2.5 text-right text-muted-foreground">{s.count}</td>
-                        <td className="num px-3 py-2.5 text-right">{inr(s.income)}</td>
-                        <td className="num px-3 py-2.5 text-right">{inr(s.expense)}</td>
-                        <td className={`num px-3 py-2.5 text-right ${s.investment < 0 ? "text-destructive" : s.investment > 0 ? "text-success" : ""}`}>
-                          {inr(s.investment)}
-                        </td>
-                        <td className="num px-3 py-2.5 text-right">{inr(s.income - s.expense)}</td>
-                        <td className="num px-5 py-2.5 text-right text-muted-foreground">
-                          {totals.expense > 0 ? `${((s.expense / totals.expense) * 100).toFixed(1)}%` : "—"}
-                        </td>
-                      </tr>
-                      {expanded[s.id] &&
-                        s.itemRows.map((i) => (
-                          <tr
-                            key={`${s.id}-${i.id}`}
-                            className="cursor-pointer border-t border-border/40 bg-muted/10 hover:bg-muted/30"
-                            onClick={() =>
-                              openDrill(
-                                `${g.label} › ${s.label} › ${i.label}`,
-                                (t) => {
+                        <tr
+                          className="cursor-pointer border-t border-border/60 bg-muted/20 hover:bg-muted/40"
+                          onClick={() =>
+                            openDrill(
+                              `${g.label} › ${s.label}`,
+                              (t) =>
+                                (t.groupId || "none") === g.id &&
+                                (t.subGroupId || "none") === s.id.slice(g.id.length + 1),
+                            )
+                          }
+                        >
+                          <td className="px-5 py-2.5 pl-12 text-muted-foreground">
+                            {s.itemRows.length > 0 ? (
+                              <button
+                                className="flex items-center gap-1.5"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setExpanded((st) => ({ ...st, [s.id]: !st[s.id] }));
+                                }}
+                              >
+                                <ChevronRight
+                                  className={`h-3.5 w-3.5 transition-transform ${expanded[s.id] ? "rotate-90" : ""}`}
+                                />
+                                {s.label}
+                              </button>
+                            ) : (
+                              <span className="pl-5">{s.label}</span>
+                            )}
+                          </td>
+                          <td className="num px-3 py-2.5 text-right text-muted-foreground">
+                            {s.count}
+                          </td>
+                          <td className="num px-3 py-2.5 text-right">{inr(s.income)}</td>
+                          <td className="num px-3 py-2.5 text-right">{inr(s.expense)}</td>
+                          <td
+                            className={`num px-3 py-2.5 text-right ${s.investment < 0 ? "text-destructive" : s.investment > 0 ? "text-success" : ""}`}
+                          >
+                            {inr(s.investment)}
+                          </td>
+                          <td className="num px-3 py-2.5 text-right">
+                            {inr(s.income - s.expense)}
+                          </td>
+                          <td className="num px-5 py-2.5 text-right text-muted-foreground">
+                            {totals.expense > 0
+                              ? `${((s.expense / totals.expense) * 100).toFixed(1)}%`
+                              : "—"}
+                          </td>
+                        </tr>
+                        {expanded[s.id] &&
+                          s.itemRows.map((i) => (
+                            <tr
+                              key={`${s.id}-${i.id}`}
+                              className="cursor-pointer border-t border-border/40 bg-muted/10 hover:bg-muted/30"
+                              onClick={() =>
+                                openDrill(`${g.label} › ${s.label} › ${i.label}`, (t) => {
                                   if ((t.groupId || "none") !== g.id) return false;
-                                  if ((t.subGroupId || "none") !== s.id.slice(g.id.length + 1)) return false;
+                                  if ((t.subGroupId || "none") !== s.id.slice(g.id.length + 1))
+                                    return false;
                                   const key = t.includesId || "none";
                                   return key === i.id;
-                                },
-                              )
-                            }
-                          >
-                            <td className="px-5 py-2 pl-20 text-xs text-muted-foreground">{i.label}</td>
-                            <td className="num px-3 py-2 text-right text-xs text-muted-foreground">{i.count}</td>
-                            <td className="num px-3 py-2 text-right text-xs">{inr(i.income)}</td>
-                            <td className="num px-3 py-2 text-right text-xs">{inr(i.expense)}</td>
-                            <td className={`num px-3 py-2 text-right text-xs ${i.investment < 0 ? "text-destructive" : i.investment > 0 ? "text-success" : ""}`}>
-                              {inr(i.investment)}
-                            </td>
-                            <td className="num px-3 py-2 text-right text-xs">{inr(i.income - i.expense)}</td>
-                            <td className="num px-5 py-2 text-right text-xs text-muted-foreground">
-                              {totals.expense > 0 ? `${((i.expense / totals.expense) * 100).toFixed(1)}%` : "—"}
-                            </td>
-                          </tr>
-                        ))}
+                                })
+                              }
+                            >
+                              <td className="px-5 py-2 pl-20 text-xs text-muted-foreground">
+                                {i.label}
+                              </td>
+                              <td className="num px-3 py-2 text-right text-xs text-muted-foreground">
+                                {i.count}
+                              </td>
+                              <td className="num px-3 py-2 text-right text-xs">{inr(i.income)}</td>
+                              <td className="num px-3 py-2 text-right text-xs">{inr(i.expense)}</td>
+                              <td
+                                className={`num px-3 py-2 text-right text-xs ${i.investment < 0 ? "text-destructive" : i.investment > 0 ? "text-success" : ""}`}
+                              >
+                                {inr(i.investment)}
+                              </td>
+                              <td className="num px-3 py-2 text-right text-xs">
+                                {inr(i.income - i.expense)}
+                              </td>
+                              <td className="num px-5 py-2 text-right text-xs text-muted-foreground">
+                                {totals.expense > 0
+                                  ? `${((i.expense / totals.expense) * 100).toFixed(1)}%`
+                                  : "—"}
+                              </td>
+                            </tr>
+                          ))}
                       </Fragment>
                     ))}
                 </Fragment>
@@ -690,10 +757,14 @@ function ReportsPage() {
                   <td className="px-5 py-3">{r.label}</td>
                   <td className="num px-5 py-3 text-right text-success">{inr(r.Income)}</td>
                   <td className="num px-5 py-3 text-right text-destructive">{inr(r.Expense)}</td>
-                  <td className={`num px-5 py-3 text-right ${r.Investment < 0 ? "text-destructive" : r.Investment > 0 ? "text-success" : ""}`}>
+                  <td
+                    className={`num px-5 py-3 text-right ${r.Investment < 0 ? "text-destructive" : r.Investment > 0 ? "text-success" : ""}`}
+                  >
                     {inr(r.Investment)}
                   </td>
-                  <td className="num px-5 py-3 text-right font-medium">{inr(r.Income - r.Expense)}</td>
+                  <td className="num px-5 py-3 text-right font-medium">
+                    {inr(r.Income - r.Expense)}
+                  </td>
                 </tr>
               ))}
               {breakdown.length === 0 && (
@@ -728,7 +799,7 @@ function ReportsPage() {
           onClose={() => setDrill(null)}
         />
       )}
-    </AppShell>
+    </>
   );
 }
 

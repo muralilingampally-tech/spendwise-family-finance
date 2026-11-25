@@ -2,7 +2,8 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { CheckCheck, Pencil, Plus, Repeat, SkipForward, Trash2 } from "lucide-react";
-import { AppShell } from "@/components/AppShell";
+import { PageHeader } from "@/components/AppShell";
+import { useShallow } from "zustand/react/shallow";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -87,7 +88,18 @@ function RecurringPage() {
     deleteRecurring,
     postRecurring,
     skipRecurring,
-  } = useApp();
+  } = useApp(
+    useShallow((state) => ({
+      masters: state.masters,
+      transactions: state.transactions,
+      recurring: state.recurring,
+      user: state.user,
+      saveRecurring: state.saveRecurring,
+      deleteRecurring: state.deleteRecurring,
+      postRecurring: state.postRecurring,
+      skipRecurring: state.skipRecurring,
+    })),
+  );
   const canWrite = can(user?.role, "write");
   const canDelete = can(user?.role, "delete");
   const [open, setOpen] = useState(false);
@@ -219,16 +231,17 @@ function RecurringPage() {
   };
 
   return (
-    <AppShell
-      title="Recurring"
-      actions={
-        canWrite ? (
-          <Button size="sm" onClick={() => openRule(null)}>
-            <Plus className="mr-1 h-4 w-4" /> New
-          </Button>
-        ) : undefined
-      }
-    >
+    <>
+      <PageHeader
+        title="Recurring"
+        actions={
+          canWrite ? (
+            <Button size="sm" onClick={() => openRule(null)}>
+              <Plus className="mr-1 h-4 w-4" /> New
+            </Button>
+          ) : undefined
+        }
+      />
       <section className="card-surface mb-5 p-5">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
@@ -517,6 +530,6 @@ function RecurringPage() {
           </form>
         </DialogContent>
       </Dialog>
-    </AppShell>
+    </>
   );
 }

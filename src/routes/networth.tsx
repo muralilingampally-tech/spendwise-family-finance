@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
-import { AppShell } from "@/components/AppShell";
+import { PageHeader } from "@/components/AppShell";
+import { useShallow } from "zustand/react/shallow";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { useApp } from "@/lib/store";
@@ -19,7 +20,10 @@ export const Route = createFileRoute("/networth")({
       { title: "Net Worth & Loans — SpendWise" },
       { name: "description", content: "Family balance versus loan outstanding, as on any date." },
       { property: "og:title", content: "Net Worth & Loans — SpendWise" },
-      { property: "og:description", content: "Balance on the plus side, each loan on the minus side." },
+      {
+        property: "og:description",
+        content: "Balance on the plus side, each loan on the minus side.",
+      },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
     ],
@@ -30,7 +34,21 @@ export const Route = createFileRoute("/networth")({
 const monthEnd = (d = new Date()) => toLocalISODate(new Date(d.getFullYear(), d.getMonth() + 1, 0));
 
 function NetWorthPage() {
-  const { masters, transactions, loans: loanList, user, deleteLoan } = useApp();
+  const {
+    masters,
+    transactions,
+    loans: loanList,
+    user,
+    deleteLoan,
+  } = useApp(
+    useShallow((state) => ({
+      masters: state.masters,
+      transactions: state.transactions,
+      loans: state.loans,
+      user: state.user,
+      deleteLoan: state.deleteLoan,
+    })),
+  );
   const canWrite = can(user?.role, "write");
   const canDelete = can(user?.role, "delete");
   const [editing, setEditing] = useState<Loan | null>(null);
@@ -40,7 +58,8 @@ function NetWorthPage() {
     setDialogOpen(true);
   };
   const removeLoan = async (loan: Loan) => {
-    if (!window.confirm(`Remove "${loan.name}" from Net Worth? Its payments stay in Transactions.`)) return;
+    if (!window.confirm(`Remove "${loan.name}" from Net Worth? Its payments stay in Transactions.`))
+      return;
     try {
       await deleteLoan(loan.id);
       toast.success(`Removed "${loan.name}"`);
@@ -58,7 +77,9 @@ function NetWorthPage() {
   }, [masters]);
 
   const balance = useMemo(() => {
-    let inc = 0, exp = 0, inv = 0;
+    let inc = 0,
+      exp = 0,
+      inv = 0;
     for (const t of transactions) {
       if (t.date > asOf) continue;
       const a = Number(t.amount) || 0;
@@ -72,27 +93,45 @@ function NetWorthPage() {
   const loans = useMemo(
     () =>
       loanList.map((l) =>
-        loanStatus(l, loanPayments(l, transactions, masters.expenseGroups, masters.expenseSubGroups), asOf),
+        loanStatus(
+          l,
+          loanPayments(l, transactions, masters.expenseGroups, masters.expenseSubGroups),
+          asOf,
+        ),
       ),
     [loanList, transactions, masters, asOf],
   );
   const debt = loans.reduce((s, l) => s + l.outstanding, 0);
 
   return (
-    <AppShell title="Net Worth">
+    <>
+      <PageHeader title="Net Worth" />
       <div className="mb-5 flex flex-wrap items-end gap-2">
         <div>
           <label className="mb-1 block text-xs text-muted-foreground">As on</label>
-          <Input type="date" value={asOf} onChange={(e) => setAsOf(e.target.value)} className="w-44" />
+          <Input
+            type="date"
+            value={asOf}
+            onChange={(e) => setAsOf(e.target.value)}
+            className="w-44"
+          />
         </div>
-        <Button variant="outline" size="sm" onClick={() => setAsOf(todayISO())}>Today</Button>
-        <Button variant="outline" size="sm" onClick={() => setAsOf(monthEnd())}>End of this month</Button>
+        <Button variant="outline" size="sm" onClick={() => setAsOf(todayISO())}>
+          Today
+        </Button>
+        <Button variant="outline" size="sm" onClick={() => setAsOf(monthEnd())}>
+          End of this month
+        </Button>
       </div>
 
       <div className="mb-6 grid gap-3 sm:grid-cols-3">
         <Card label="Balance (plus side)" value={inr(balance.total)} tone="text-primary" />
         <Card label="Loans outstanding" value={inr(-debt)} tone="text-destructive" />
-        <Card label="Net worth" value={inr(balance.total - debt)} tone={balance.total - debt >= 0 ? "text-primary" : "text-destructive"} />
+        <Card
+          label="Net worth"
+          value={inr(balance.total - debt)}
+          tone={balance.total - debt >= 0 ? "text-primary" : "text-destructive"}
+        />
       </div>
 
       <div className="grid gap-6 lg:grid-cols-2">
@@ -120,7 +159,10 @@ function NetWorthPage() {
           )}
           {loans.map((s) => (
             <div key={s.loan.id} className="border-b border-border py-2 last:border-0">
-              <button className="flex w-full justify-between text-left" onClick={() => setOpen(open === s.loan.id ? null : s.loan.id)}>
+              <button
+                className="flex w-full justify-between text-left"
+                onClick={() => setOpen(open === s.loan.id ? null : s.loan.id)}
+              >
                 <span>
                   <span className="font-medium">{s.loan.name}</span>
                   <span className="block text-xs text-muted-foreground">{s.loan.note}</span>
@@ -129,7 +171,9 @@ function NetWorthPage() {
               </button>
               <div className="mt-1 grid grid-cols-2 gap-x-4 text-xs text-muted-foreground">
                 <span>Loan amount: {inr(s.loan.principal)}</span>
-                <span>Paid: {inr(s.paid)} ({s.payments.length})</span>
+                <span>
+                  Paid: {inr(s.paid)} ({s.payments.length})
+                </span>
                 <span>Principal repaid: {inr(s.principalPaid)}</span>
                 <span>Interest paid: {inr(s.interestPaid)}</span>
                 {s.accrued > 0 && <span>Interest due: {inr(s.accrued)}</span>}
@@ -137,12 +181,22 @@ function NetWorthPage() {
               {(canWrite || canDelete) && (
                 <div className="mt-1 flex gap-1">
                   {canWrite && (
-                    <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={() => openLoan(s.loan)}>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-7 px-2 text-xs"
+                      onClick={() => openLoan(s.loan)}
+                    >
                       <Pencil className="mr-1 h-3 w-3" /> Edit
                     </Button>
                   )}
                   {canDelete && (
-                    <Button size="sm" variant="ghost" className="h-7 px-2 text-xs text-destructive" onClick={() => removeLoan(s.loan)}>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-7 px-2 text-xs text-destructive"
+                      onClick={() => removeLoan(s.loan)}
+                    >
                       <Trash2 className="mr-1 h-3 w-3" /> Remove
                     </Button>
                   )}
@@ -150,10 +204,16 @@ function NetWorthPage() {
               )}
               {open === s.loan.id && (
                 <ul className="mt-2 space-y-1 text-xs">
-                  {s.payments.length === 0 && <li className="text-muted-foreground">No payments under Loans › {s.loan.subGroupName} yet.</li>}
+                  {s.payments.length === 0 && (
+                    <li className="text-muted-foreground">
+                      No payments under Loans › {s.loan.subGroupName} yet.
+                    </li>
+                  )}
                   {s.payments.map((p) => (
                     <li key={p.id} className="flex justify-between">
-                      <span>{shortDate(p.date)} {p.remarks}</span>
+                      <span>
+                        {shortDate(p.date)} {p.remarks}
+                      </span>
                       <span>{inr(Number(p.amount))}</span>
                     </li>
                   ))}
@@ -165,7 +225,7 @@ function NetWorthPage() {
         </section>
       </div>
       <LoanDialog open={dialogOpen} onOpenChange={setDialogOpen} loan={editing} />
-    </AppShell>
+    </>
   );
 }
 
@@ -180,7 +240,9 @@ function Card({ label, value, tone }: { label: string; value: string; tone: stri
 
 function Row({ k, v, bold }: { k: string; v: string; bold?: boolean }) {
   return (
-    <div className={`flex justify-between py-1.5 text-sm ${bold ? "mt-1 border-t border-border pt-2 font-semibold" : ""}`}>
+    <div
+      className={`flex justify-between py-1.5 text-sm ${bold ? "mt-1 border-t border-border pt-2 font-semibold" : ""}`}
+    >
       <span>{k}</span>
       <span>{v}</span>
     </div>
