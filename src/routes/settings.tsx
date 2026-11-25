@@ -66,7 +66,7 @@ function SettingsPage() {
           <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
             <Row label="Name" value={user?.displayName ?? "—"} />
             <Row label="Email" value={user?.email ?? "—"} />
-            <Row label="Role" value={user?.role ?? "—"} />
+            <Row label="Role" value={user?.role ?? "—"} capitalize />
             <Row label="Family ID" value={user?.familyId ?? "—"} />
           </dl>
         </section>
@@ -210,11 +210,19 @@ function BackupSection() {
   );
 }
 
-function Row({ label, value }: { label: string; value: string }) {
+function Row({
+  label,
+  value,
+  capitalize = false,
+}: {
+  label: string;
+  value: string;
+  capitalize?: boolean;
+}) {
   return (
     <div>
       <dt className="text-xs uppercase tracking-wide text-muted-foreground">{label}</dt>
-      <dd className="mt-0.5 font-medium capitalize">{value}</dd>
+      <dd className={`mt-0.5 break-all font-medium ${capitalize ? "capitalize" : ""}`}>{value}</dd>
     </div>
   );
 }

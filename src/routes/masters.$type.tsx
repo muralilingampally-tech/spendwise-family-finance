@@ -14,6 +14,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useApp } from "@/lib/store";
+import { masterUsage, usageBlocker } from "@/lib/masterUsage";
 import { PAYMENT_SOURCE_KINDS } from "@/lib/seed";
 import { MASTER_LABELS, MASTER_SLUGS, type MasterItem } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -43,7 +44,7 @@ const selectClass =
 function MastersPage() {
   const { type } = useParams({ from: "/masters/$type" });
   const collection = MASTER_SLUGS[type] ?? "expenseGroups";
-  const { masters, saveMaster, deleteMaster, user } = useApp();
+  const { masters, saveMaster, deleteMaster, user, transactions, budgets } = useApp();
 
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<MasterItem | null>(null);
@@ -81,6 +82,21 @@ function MastersPage() {
   }, [masters, collection, search]);
 
   const isAdmin = user?.role === "admin";
+
+  const remove = async (item: MasterItem) => {
+    const blocker = usageBlocker(item.name, masterUsage(item.id, transactions, budgets, masters));
+    if (blocker) {
+      toast.error(blocker, { duration: 8000 });
+      return;
+    }
+    if (!window.confirm(`Delete "${item.name}"? This cannot be undone.`)) return;
+    try {
+      await deleteMaster(collection, item.id);
+      toast.success(`Deleted "${item.name}"`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not delete");
+    }
+  };
 
   const openNew = () => {
     setEditing(null);
@@ -184,10 +200,7 @@ function MastersPage() {
                           size="icon"
                           variant="ghost"
                           aria-label="Delete"
-                          onClick={async () => {
-                            await deleteMaster(collection, item.id);
-                            toast.success("Deleted");
-                          }}
+                          onClick={() => remove(item)}
                         >
                           <Trash2 className="h-4 w-4 text-destructive" />
                         </Button>

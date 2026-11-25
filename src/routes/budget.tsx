@@ -1,12 +1,13 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { Save, TrendingUp } from "lucide-react";
+import { Copy, Save, TrendingUp } from "lucide-react";
+import { toast } from "sonner";
 import { AppShell } from "@/components/AppShell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useApp } from "@/lib/store";
-import { inr, todayISO } from "@/lib/format";
+import { inr, monthLabel, previousPeriod, todayISO } from "@/lib/format";
 import type { TransactionType } from "@/lib/types";
 
 export const Route = createFileRoute("/budget")({
@@ -39,7 +40,7 @@ const daysInMonth = (period: string) => {
 };
 
 function BudgetPage() {
-  const { masters, transactions, budgets, saveBudget } = useApp();
+  const { masters, transactions, budgets, saveBudget, saveBudgets } = useApp();
   const [period, setPeriod] = useState(() => todayISO().slice(0, 7));
   const [type, setType] = useState<TransactionType>("expense");
   const [drafts, setDrafts] = useState<Record<string, string>>({});
@@ -110,37 +111,77 @@ function BudgetPage() {
     [rows],
   );
 
+  const readDraft = (groupId: string) => {
+    const value = Number(drafts[groupId] || 0);
+    return Number.isFinite(value) && value >= 0 ? value : null;
+  };
+
   const save = async (groupId: string) => {
+    const amount = readDraft(groupId);
+    if (amount === null) return toast.error("Enter a budget of zero or more");
     setSaving(groupId);
     try {
-      await saveBudget({ period, groupId, type, amount: Number(drafts[groupId] || 0) });
+      await saveBudget({ period, groupId, type, amount });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not save budget");
     } finally {
       setSaving(null);
     }
   };
 
   const saveAll = async () => {
+    const changed = groups.filter((g) => readDraft(g.id) !== (budgetFor.get(g.id) ?? 0));
+    if (changed.some((g) => readDraft(g.id) === null)) {
+      return toast.error("Every budget must be zero or more");
+    }
+    if (changed.length === 0) return toast.info("No changes to save");
     setSaving("all");
     try {
-      for (const g of groups) {
-        const value = Number(drafts[g.id] || 0);
-        if (value !== (budgetFor.get(g.id) ?? 0)) {
-          await saveBudget({ period, groupId: g.id, type, amount: value });
-        }
-      }
+      await saveBudgets(
+        changed.map((g) => ({ period, groupId: g.id, type, amount: readDraft(g.id) ?? 0 })),
+      );
+      toast.success(`Saved ${changed.length} budget${changed.length === 1 ? "" : "s"}`);
+    } catch (error) {
+      toast.error(
+        `Some budgets did not save: ${error instanceof Error ? error.message : "write failed"}. Press Save all again to retry.`,
+      );
     } finally {
       setSaving(null);
     }
+  };
+
+  const prev = previousPeriod(period);
+  const copyPrevious = () => {
+    const source = new Map(
+      budgets.filter((b) => b.period === prev).map((b) => [b.groupId, Number(b.amount) || 0]),
+    );
+    const copied = groups.filter((g) => source.has(g.id));
+    if (copied.length === 0) {
+      return toast.info(`No ${type} budgets were set for ${monthLabel(prev)}`);
+    }
+    setDrafts((d) => ({
+      ...d,
+      ...Object.fromEntries(copied.map((g) => [g.id, String(source.get(g.id))])),
+    }));
+    toast.success(
+      `Copied ${copied.length} budget${copied.length === 1 ? "" : "s"} from ${monthLabel(prev)}. Review, then Save all.`,
+    );
   };
 
   return (
     <AppShell
       title="Budget vs Actual"
       actions={
-        <Button size="sm" onClick={saveAll} disabled={saving !== null}>
-          <Save className="mr-2 h-4 w-4" />
-          Save all
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button size="sm" variant="outline" onClick={copyPrevious} disabled={saving !== null}>
+            <Copy className="mr-2 h-4 w-4" />
+            Copy {monthLabel(prev)}
+          </Button>
+          <Button size="sm" onClick={saveAll} disabled={saving !== null}>
+            <Save className="mr-2 h-4 w-4" />
+            {saving === "all" ? "Saving…" : "Save all"}
+          </Button>
+        </div>
       }
     >
       <section className="card-surface p-5">

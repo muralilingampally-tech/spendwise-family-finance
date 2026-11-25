@@ -162,10 +162,9 @@ export async function seedFamilyMasters(familyId: string) {
   const version = await readSeedVersion(familyId);
   const existing = await repo.list(familyId, "expenseGroups");
   if (version >= SEED_VERSION && existing.length > 0) {
-    // Merge duplicates and masters the user renamed (old seed name re-created
-    // alongside the new one). Starter rows are never re-added once the
-    // workspace exists, so renamed/deleted masters stay that way.
-    await dedupeMasters(familyId);
+    // Starter rows are never re-added once the workspace exists, so
+    // renamed/deleted masters stay that way. Duplicates are merged by
+    // dedupeMasters, which the store runs in the background after loading.
     return;
   }
 
@@ -221,7 +220,7 @@ const MASTER_RENAMES: [string, string, string][] = [
  * Collapses duplicate master rows (same collection, name and parent) down to
  * one, repointing child masters, transactions and budgets at the survivor.
  */
-export async function dedupeMasters(familyId: string) {
+export async function dedupeMasters(familyId: string): Promise<boolean> {
   const remap = new Map<string, string>(); // duplicateId -> keptId
 
   for (const collection of MASTER_COLLECTIONS) {
@@ -254,7 +253,7 @@ export async function dedupeMasters(familyId: string) {
     }
   }
 
-  if (remap.size === 0) return;
+  if (remap.size === 0) return false;
 
   const txns = (await repo.list(familyId, "transactions")) as unknown as Transaction[];
   for (const t of txns) {
@@ -273,6 +272,7 @@ export async function dedupeMasters(familyId: string) {
       await repo.update(familyId, "budgets", b.id, { groupId: remap.get(b.groupId) });
     }
   }
+  return true;
 }
 
 /** Registers the signed-in user as a member of the family (needed by Firestore rules). */

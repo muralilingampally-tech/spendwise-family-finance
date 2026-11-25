@@ -21,6 +21,26 @@ import { inr, normalizeDate, shortDate, todayISO } from "@/lib/format";
 import { NECESSITY_GROUPS } from "@/lib/seed";
 import type { Necessity, Transaction, TransactionType } from "@/lib/types";
 import { buildTransactionsWorkbook, downloadBlob, readWorkbookRows } from "@/lib/excel";
+import { findSavedDuplicates } from "@/lib/duplicates";
+
+/** The type and payment source of the last entry added on this device. */
+const LAST_ENTRY_KEY = "spendwise:last-entry";
+
+function readLastEntry(): { type?: TransactionType; paymentSourceId?: string } {
+  try {
+    return JSON.parse(window.localStorage.getItem(LAST_ENTRY_KEY) ?? "{}") ?? {};
+  } catch {
+    return {};
+  }
+}
+
+function writeLastEntry(type: TransactionType, paymentSourceId: string) {
+  try {
+    window.localStorage.setItem(LAST_ENTRY_KEY, JSON.stringify({ type, paymentSourceId }));
+  } catch {
+    // Storage can be unavailable (private mode); remembering is only a convenience.
+  }
+}
 
 export const Route = createFileRoute("/transactions")({
   head: () => ({
@@ -126,6 +146,7 @@ function TransactionsPage() {
     saveTransaction,
     bulkImportTransactions,
     deleteTransaction,
+    restoreTransaction,
     user,
   } = useApp(useShallow((state) => ({
     transactions: state.transactions,
@@ -134,6 +155,7 @@ function TransactionsPage() {
     saveTransaction: state.saveTransaction,
     bulkImportTransactions: state.bulkImportTransactions,
     deleteTransaction: state.deleteTransaction,
+    restoreTransaction: state.restoreTransaction,
     user: state.user,
   })));
   const [open, setOpen] = useState(false);
@@ -265,7 +287,14 @@ function TransactionsPage() {
 
   const openNew = () => {
     setEditing(null);
-    form.reset({ ...emptyValues, createdBy: user?.uid ?? "" });
+    const last = readLastEntry();
+    const type: TransactionType =
+      last.type === "income" || last.type === "investment" ? last.type : "expense";
+    const paymentSourceId = masters.paymentSources.some((p) => p.id === last.paymentSourceId)
+      ? (last.paymentSourceId as string)
+      : "";
+    // A fresh date each time: the page may have been open since yesterday.
+    form.reset({ ...emptyValues, date: todayISO(), type, paymentSourceId, createdBy: user?.uid ?? "" });
     setOpen(true);
   };
 
@@ -311,6 +340,7 @@ function TransactionsPage() {
         },
         editing?.id,
       );
+      if (!editing) writeLastEntry(values.type, values.paymentSourceId);
       toast.success(editing ? "Transaction updated" : "Transaction added");
       setOpen(false);
     } catch (error) {
@@ -321,6 +351,28 @@ function TransactionsPage() {
   });
 
   const canDelete = user?.role === "admin";
+
+  const removeWithUndo = async (t: Transaction) => {
+    try {
+      await deleteTransaction(t.id);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not delete transaction");
+      return;
+    }
+    toast.success(`Deleted ${inr(Number(t.amount))} on ${shortDate(t.date)}`, {
+      duration: 8000,
+      action: {
+        label: "Undo",
+        onClick: () => {
+          restoreTransaction(t)
+            .then(() => toast.success("Transaction restored"))
+            .catch((error) =>
+              toast.error(error instanceof Error ? error.message : "Could not restore transaction"),
+            );
+        },
+      },
+    });
+  };
 
   const exportTemplate = async () => {
     const helperLines = [
@@ -562,8 +614,42 @@ function TransactionsPage() {
         } satisfies Partial<Transaction>;
       });
 
-      await bulkImportTransactions(records);
-      toast.success(`Imported ${records.length} transaction${records.length === 1 ? "" : "s"}`);
+      // Re-importing the same sheet is the most common way to double-count.
+      const duplicates = new Set(findSavedDuplicates(transactions, records));
+      let toImport = records;
+      if (duplicates.size > 0) {
+        const fresh = records.length - duplicates.size;
+        const skip = window.confirm(
+          `${duplicates.size} of ${records.length} rows match entries that are already saved ` +
+            `(same date, type, group, sub group, payment source, amount and remarks).\n\n` +
+            `OK: skip those and import the other ${fresh}.\nCancel: stop, import nothing.`,
+        );
+        if (!skip) {
+          toast.info("Import cancelled. Nothing was saved.");
+          return;
+        }
+        toImport = records.filter((_, i) => !duplicates.has(i));
+        if (toImport.length === 0) {
+          toast.info("Every row is already saved. Nothing new to import.");
+          return;
+        }
+      }
+
+      const before = useApp.getState().transactions.length;
+      try {
+        await bulkImportTransactions(toImport);
+      } catch (error) {
+        const saved = useApp.getState().transactions.length - before;
+        throw new Error(
+          `Import stopped after saving ${saved} of ${toImport.length} rows: ` +
+            `${error instanceof Error ? error.message : "a write failed"}. ` +
+            `Importing the same file again will skip the rows that saved.`,
+        );
+      }
+      const skipped = duplicates.size ? `, skipped ${duplicates.size} already saved` : "";
+      toast.success(
+        `Imported ${toImport.length} transaction${toImport.length === 1 ? "" : "s"}${skipped}`,
+      );
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Could not import file");
     } finally {
@@ -713,10 +799,7 @@ function TransactionsPage() {
                         size="icon"
                         variant="ghost"
                         aria-label="Delete"
-                        onClick={async () => {
-                          await deleteTransaction(t.id);
-                          toast.success("Transaction deleted");
-                        }}
+                        onClick={() => removeWithUndo(t)}
                       >
                         <Trash2 className="h-4 w-4 text-destructive" />
                       </Button>

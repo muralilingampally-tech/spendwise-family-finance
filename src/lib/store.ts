@@ -1,6 +1,15 @@
 import { create } from "zustand";
 import { getFirebaseAuth, isEmailAllowed, isFirebaseConfigured, sharedFamilyId } from "./firebase";
-import { ensureMembership, loadBudgets, loadMasters, loadMembers, loadTransactions, repo, seedFamilyMasters } from "./repo";
+import {
+  dedupeMasters,
+  ensureMembership,
+  loadBudgets,
+  loadMasters,
+  loadMembers,
+  loadTransactions,
+  repo,
+  seedFamilyMasters,
+} from "./repo";
 import type { AppUser, Budget, MasterCollection, MasterItem, Member, Transaction } from "./types";
 import { normalizeDate } from "./format";
 
@@ -52,9 +61,19 @@ interface AppState {
   saveTransaction: (values: Partial<Transaction>, id?: string) => Promise<void>;
   bulkImportTransactions: (rows: Array<Partial<Transaction>>) => Promise<void>;
   deleteTransaction: (id: string) => Promise<void>;
-  saveBudget: (values: Partial<Budget> & { period: string; groupId: string }) => Promise<void>;
+  /** Puts a deleted transaction back under its original id (undo). */
+  restoreTransaction: (transaction: Transaction) => Promise<void>;
+  saveBudget: (values: BudgetInput) => Promise<void>;
+  /** Saves several budgets; rows that saved are kept even if one fails. */
+  saveBudgets: (values: BudgetInput[]) => Promise<void>;
   deleteBudget: (id: string) => Promise<void>;
 }
+
+type BudgetInput = Partial<Budget> & { period: string; groupId: string };
+
+const byName = (a: MasterItem, b: MasterItem) => a.name.localeCompare(b.name);
+const byDateDesc = (a: Transaction, b: Transaction) => b.date.localeCompare(a.date);
+const byPeriodDesc = (a: Budget, b: Budget) => b.period.localeCompare(a.period);
 
 let initialised = false;
 
@@ -93,6 +112,11 @@ export const useApp = create<AppState>((set, get) => ({
         } catch (error) {
           console.error("Loading family data failed", error);
         }
+        // Merging duplicate masters scans every collection, so it runs after
+        // the app is usable and reloads only if it actually changed something.
+        void dedupeMasters(user.familyId)
+          .then((changed) => (changed ? get().refresh() : undefined))
+          .catch((error) => console.error("Merging duplicate masters failed", error));
       } else {
         set({ masters: emptyMasters, transactions: [], members: [], budgets: [] });
       }
@@ -197,9 +221,18 @@ export const useApp = create<AppState>((set, get) => ({
     const user = get().user;
     if (!user) return;
     if (id) {
-      await repo.update(user.familyId, collection, id, { ...values, updatedAt: now() });
+      const patch = { ...values, updatedAt: now() };
+      await repo.update(user.familyId, collection, id, patch);
+      set((state) => ({
+        masters: {
+          ...state.masters,
+          [collection]: state.masters[collection]
+            .map((m) => (m.id === id ? { ...m, ...patch } : m))
+            .sort(byName),
+        },
+      }));
     } else {
-      await repo.create(user.familyId, collection, {
+      const created = (await repo.create(user.familyId, collection, {
         name: "",
         parentId: null,
         kind: null,
@@ -207,16 +240,26 @@ export const useApp = create<AppState>((set, get) => ({
         ...values,
         createdAt: now(),
         updatedAt: now(),
-      });
+      })) as unknown as MasterItem;
+      set((state) => ({
+        masters: {
+          ...state.masters,
+          [collection]: [...state.masters[collection], created].sort(byName),
+        },
+      }));
     }
-    await get().refresh();
   },
 
   deleteMaster: async (collection, id) => {
     const user = get().user;
     if (!user) return;
     await repo.remove(user.familyId, collection, id);
-    await get().refresh();
+    set((state) => ({
+      masters: {
+        ...state.masters,
+        [collection]: state.masters[collection].filter((m) => m.id !== id),
+      },
+    }));
   },
 
   saveTransaction: async (values, id) => {
@@ -285,39 +328,75 @@ export const useApp = create<AppState>((set, get) => ({
     set((state) => ({ transactions: state.transactions.filter((t) => t.id !== id) }));
   },
 
-  saveBudget: async ({ period, groupId, amount = 0, type = "expense", notes = null }) => {
+  restoreTransaction: async (transaction) => {
     const user = get().user;
     if (!user) return;
-    const existing = get().budgets.find(
-      (b) => b.period === period && b.groupId === groupId,
+    const { id, ...data } = transaction;
+    await repo.set(user.familyId, "transactions", id, data);
+    set((state) => ({
+      transactions: [transaction, ...state.transactions.filter((t) => t.id !== id)].sort(
+        byDateDesc,
+      ),
+    }));
+  },
+
+  saveBudget: async (values) => {
+    const user = get().user;
+    if (!user) return;
+    const saved = await writeBudget(user.familyId, get().budgets, values);
+    set((state) => ({ budgets: mergeBudgets(state.budgets, [saved]) }));
+  },
+
+  saveBudgets: async (list) => {
+    const user = get().user;
+    if (!user) return;
+    const current = get().budgets;
+    const results = await Promise.allSettled(
+      list.map((values) => writeBudget(user.familyId, current, values)),
     );
-    if (existing) {
-      await repo.update(user.familyId, "budgets", existing.id, {
-        amount: Number(amount) || 0,
-        notes,
-        updatedAt: now(),
-      });
-    } else {
-      await repo.create(user.familyId, "budgets", {
-        period,
-        groupId,
-        type,
-        amount: Number(amount) || 0,
-        notes,
-        createdAt: now(),
-        updatedAt: now(),
-      });
-    }
-    await get().refresh();
+    const saved = results.flatMap((r) => (r.status === "fulfilled" ? [r.value] : []));
+    set((state) => ({ budgets: mergeBudgets(state.budgets, saved) }));
+    const failure = results.find((r) => r.status === "rejected");
+    if (failure?.status === "rejected") throw failure.reason;
   },
 
   deleteBudget: async (id) => {
     const user = get().user;
     if (!user) return;
     await repo.remove(user.familyId, "budgets", id);
-    await get().refresh();
+    set((state) => ({ budgets: state.budgets.filter((b) => b.id !== id) }));
   },
 }));
+
+/** Creates or updates the budget for (period, group) and returns the saved row. */
+async function writeBudget(
+  familyId: string,
+  budgets: Budget[],
+  { period, groupId, amount = 0, type = "expense", notes = null }: BudgetInput,
+): Promise<Budget> {
+  const existing = budgets.find((b) => b.period === period && b.groupId === groupId);
+  const value = Number(amount) || 0;
+  if (existing) {
+    const patch = { amount: value, notes, updatedAt: now() };
+    await repo.update(familyId, "budgets", existing.id, patch);
+    return { ...existing, ...patch };
+  }
+  const created = await repo.create(familyId, "budgets", {
+    period,
+    groupId,
+    type,
+    amount: value,
+    notes,
+    createdAt: now(),
+    updatedAt: now(),
+  });
+  return created as unknown as Budget;
+}
+
+function mergeBudgets(budgets: Budget[], saved: Budget[]) {
+  const ids = new Set(saved.map((b) => b.id));
+  return [...budgets.filter((b) => !ids.has(b.id)), ...saved].sort(byPeriodDesc);
+}
 
 function signInLocally(
   name: string,

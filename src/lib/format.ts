@@ -14,6 +14,12 @@ export const shortDate = (value: string) => {
 
 export const monthKey = (iso: string) => iso.slice(0, 7);
 
+/** yyyy-MM of the month before `period` (yyyy-MM). */
+export const previousPeriod = (period: string) => {
+  const [y, m] = period.split("-").map(Number);
+  return m === 1 ? `${y - 1}-12` : `${y}-${String(m - 1).padStart(2, "0")}`;
+};
+
 export const monthLabel = (key: string) => {
   const d = new Date(`${key}-01T00:00:00`);
   return d.toLocaleDateString("en-IN", { month: "short", year: "2-digit" });
