@@ -19,6 +19,7 @@ import {
 import { useApp } from "@/lib/store";
 import { isFirebaseConfigured } from "@/lib/firebase";
 import { downloadBlob } from "@/lib/excel";
+import { can, isRole, ROLE_LABELS } from "@/lib/permissions";
 import {
   backupCounts,
   backupFilename,
@@ -84,6 +85,8 @@ function SettingsPage() {
           </div>
         </section>
 
+        <MembersSection />
+
         <BackupSection />
 
         <section className="card-surface p-5">
@@ -99,8 +102,79 @@ function SettingsPage() {
   );
 }
 
+function MembersSection() {
+  const user = useApp((s) => s.user);
+  const members = useApp((s) => s.members);
+  const setMemberRole = useApp((s) => s.setMemberRole);
+  const [busy, setBusy] = useState<string | null>(null);
+  const canManage = can(user?.role, "manageMembers");
+
+  if (members.length === 0) return null;
+
+  const change = async (uid: string, value: string) => {
+    if (!isRole(value)) return;
+    setBusy(uid);
+    try {
+      await setMemberRole(uid, value);
+      toast.success(`Role changed to ${ROLE_LABELS[value].label}`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not change role");
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  return (
+    <section className="card-surface p-5">
+      <h2 className="text-sm font-semibold">Members</h2>
+      <p className="mt-1 text-sm text-muted-foreground">
+        {canManage
+          ? "Choose what each person can do. You cannot change your own role."
+          : "Only an admin can change roles."}
+      </p>
+      <ul className="mt-4 divide-y divide-border">
+        {members.map((m) => {
+          const role = isRole(m.role) ? m.role : "admin";
+          const self = m.id === user?.uid;
+          return (
+            <li key={m.id} className="flex flex-wrap items-center justify-between gap-3 py-3">
+              <div className="min-w-0">
+                <div className="truncate text-sm font-medium">
+                  {m.displayName || m.email || "Unknown"}
+                  {self && <span className="text-muted-foreground"> (you)</span>}
+                </div>
+                {m.email && (
+                  <div className="truncate text-xs text-muted-foreground">{m.email}</div>
+                )}
+              </div>
+              {canManage && !self ? (
+                <select
+                  aria-label={`Role for ${m.displayName || m.email || "member"}`}
+                  className="h-9 rounded-md border border-input bg-background px-3 text-sm"
+                  value={role}
+                  disabled={busy === m.id}
+                  onChange={(e) => change(m.id, e.target.value)}
+                >
+                  {(["admin", "member", "viewer"] as const).map((r) => (
+                    <option key={r} value={r}>
+                      {ROLE_LABELS[r].label} — {ROLE_LABELS[r].description}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <span className="text-sm text-muted-foreground">{ROLE_LABELS[role].label}</span>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+    </section>
+  );
+}
+
 function BackupSection() {
   const user = useApp((s) => s.user);
+  const canRestore = can(user?.role, "delete");
   const refresh = useApp((s) => s.refresh);
   const fileRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -173,7 +247,8 @@ function BackupSection() {
           size="sm"
           variant="outline"
           onClick={() => fileRef.current?.click()}
-          disabled={!!busy}
+          disabled={!!busy || !canRestore}
+          title={canRestore ? undefined : "Only an admin can restore a backup"}
         >
           <Upload className="h-4 w-4" /> Restore from file
         </Button>

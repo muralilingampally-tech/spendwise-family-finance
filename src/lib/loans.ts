@@ -1,19 +1,14 @@
-import type { MasterItem, Transaction } from "./types";
+import type { Loan, MasterItem, Transaction } from "./types";
 
 /** Loan definitions (from the family's Loans sheet). EMIs are expense entries
  * under the "Loans" group, matched to a loan by its sub group name. */
-export interface LoanDef {
-  id: string;
-  name: string;
-  subGroupName: string;
-  principal: number;
-  annualRate: number;
-  startDate: string; // yyyy-MM-dd, balance baseline
-  method: "emi" | "daily";
-  note: string;
-}
+export type LoanDef = Loan;
 
-export const LOANS: LoanDef[] = [
+/**
+ * The family's loans as they were hard-coded before loans moved into the app.
+ * Only used once, to seed the "loans" collection (see seedLoans).
+ */
+export const LEGACY_LOANS: Loan[] = [
   {
     id: "personal",
     name: "Personal Loan",

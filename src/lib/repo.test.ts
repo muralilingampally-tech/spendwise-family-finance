@@ -122,3 +122,23 @@ describe("backup and restore", () => {
     ).toThrow("without an id");
   });
 });
+
+describe("loans move into the app once", () => {
+  test("seeds the old loans under fixed ids, and never re-adds removed ones", async () => {
+    const { seedLoans } = await import("./repo");
+    await seedLoans(FAMILY);
+    const loans = await repo.list(FAMILY, "loans");
+    expect(loans.map((l) => l.id).sort()).toEqual(["gold", "personal"]);
+
+    await repo.remove(FAMILY, "loans", "gold");
+    await seedLoans(FAMILY);
+    expect((await repo.list(FAMILY, "loans")).map((l) => l.id)).toEqual(["personal"]);
+  });
+
+  test("a family that already has loans is not seeded", async () => {
+    const { seedLoans } = await import("./repo");
+    await repo.set(FAMILY, "loans", "home", { name: "Home Loan" });
+    await seedLoans(FAMILY);
+    expect((await repo.list(FAMILY, "loans")).map((l) => l.id)).toEqual(["home"]);
+  });
+});

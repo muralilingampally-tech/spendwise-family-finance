@@ -13,6 +13,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as BudgetRouteImport } from './routes/budget'
 import { Route as NetworthRouteImport } from './routes/networth'
+import { Route as RecurringRouteImport } from './routes/recurring'
 import { Route as ReportsRouteImport } from './routes/reports'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as TransactionsRouteImport } from './routes/transactions'
@@ -36,6 +37,11 @@ const BudgetRoute = BudgetRouteImport.update({
 const NetworthRoute = NetworthRouteImport.update({
   id: '/networth',
   path: '/networth',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const RecurringRoute = RecurringRouteImport.update({
+  id: '/recurring',
+  path: '/recurring',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ReportsRoute = ReportsRouteImport.update({
@@ -64,6 +70,7 @@ export interface FileRoutesByFullPath {
   '/auth': typeof AuthRoute
   '/budget': typeof BudgetRoute
   '/networth': typeof NetworthRoute
+  '/recurring': typeof RecurringRoute
   '/reports': typeof ReportsRoute
   '/settings': typeof SettingsRoute
   '/transactions': typeof TransactionsRoute
@@ -74,6 +81,7 @@ export interface FileRoutesByTo {
   '/auth': typeof AuthRoute
   '/budget': typeof BudgetRoute
   '/networth': typeof NetworthRoute
+  '/recurring': typeof RecurringRoute
   '/reports': typeof ReportsRoute
   '/settings': typeof SettingsRoute
   '/transactions': typeof TransactionsRoute
@@ -85,6 +93,7 @@ export interface FileRoutesById {
   '/auth': typeof AuthRoute
   '/budget': typeof BudgetRoute
   '/networth': typeof NetworthRoute
+  '/recurring': typeof RecurringRoute
   '/reports': typeof ReportsRoute
   '/settings': typeof SettingsRoute
   '/transactions': typeof TransactionsRoute
@@ -97,6 +106,7 @@ export interface FileRouteTypes {
     | '/auth'
     | '/budget'
     | '/networth'
+    | '/recurring'
     | '/reports'
     | '/settings'
     | '/transactions'
@@ -107,6 +117,7 @@ export interface FileRouteTypes {
     | '/auth'
     | '/budget'
     | '/networth'
+    | '/recurring'
     | '/reports'
     | '/settings'
     | '/transactions'
@@ -117,6 +128,7 @@ export interface FileRouteTypes {
     | '/auth'
     | '/budget'
     | '/networth'
+    | '/recurring'
     | '/reports'
     | '/settings'
     | '/transactions'
@@ -128,6 +140,7 @@ export interface RootRouteChildren {
   AuthRoute: typeof AuthRoute
   BudgetRoute: typeof BudgetRoute
   NetworthRoute: typeof NetworthRoute
+  RecurringRoute: typeof RecurringRoute
   ReportsRoute: typeof ReportsRoute
   SettingsRoute: typeof SettingsRoute
   TransactionsRoute: typeof TransactionsRoute
@@ -162,6 +175,13 @@ declare module '@tanstack/react-router' {
       path: '/networth'
       fullPath: '/networth'
       preLoaderRoute: typeof NetworthRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/recurring': {
+      id: '/recurring'
+      path: '/recurring'
+      fullPath: '/recurring'
+      preLoaderRoute: typeof RecurringRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/reports': {
@@ -200,6 +220,7 @@ const rootRouteChildren: RootRouteChildren = {
   AuthRoute: AuthRoute,
   BudgetRoute: BudgetRoute,
   NetworthRoute: NetworthRoute,
+  RecurringRoute: RecurringRoute,
   ReportsRoute: ReportsRoute,
   SettingsRoute: SettingsRoute,
   TransactionsRoute: TransactionsRoute,

@@ -11,12 +11,18 @@ mock.module("./repo", () => ({
   ensureMembership: async () => {},
   seedFamilyMasters: async () => {},
   dedupeMasters: async () => false,
+  normalizeTransactions: (rows: Array<{ date: string }>) =>
+    [...rows].sort((a, b) => b.date.localeCompare(a.date)),
   loadMasters: list,
   loadTransactions: list,
   loadMembers: list,
   loadBudgets: list,
+  loadRecurring: list,
+  loadLoans: list,
+  seedLoans: async () => {},
 }));
-const { useApp } = await import("./store");
+const { useApp, startLiveSync, stopLiveSync } = await import("./store");
+const { repo: mockedRepo } = await import("./repo");
 
 const entry = {
   date: "2026-11-08", type: "expense" as const, groupId: "food",
@@ -132,5 +138,85 @@ describe("undo delete", () => {
     expect(set).toHaveBeenCalledTimes(1);
     expect((set.mock.calls[0] as unknown[])[2]).toBe("gone");
     expect(useApp.getState().transactions.map((x) => x.id)).toEqual(["gone", "keep"]);
+  });
+});
+
+describe("live sync", () => {
+  test("other members' changes replace the list; stops on sign-out", async () => {
+    const listeners = new Map<string, (rows: Array<Record<string, unknown>>) => void>();
+    const stopped: string[] = [];
+    (mockedRepo as unknown as Record<string, unknown>).subscribe = async (
+      _f: string,
+      collection: string,
+      onRows: (rows: Array<Record<string, unknown>>) => void,
+    ) => {
+      listeners.set(collection, onRows);
+      return () => stopped.push(collection);
+    };
+    useApp.setState({ transactions: [{ ...entry, id: "mine" }], budgets: [] });
+    await startLiveSync("test-family", useApp.setState, useApp.getState);
+
+    listeners.get("transactions")!([
+      { ...entry, id: "mine" },
+      { ...entry, id: "partner", date: "2026-11-09", amount: 75 },
+    ]);
+    expect(useApp.getState().transactions.map((t) => t.id)).toEqual(["partner", "mine"]);
+
+    listeners.get("budgets")!([{ id: "b", period: "2026-11", groupId: "food", amount: 10 }]);
+    expect(useApp.getState().budgets.map((b) => b.id)).toEqual(["b"]);
+
+    stopLiveSync();
+    expect(stopped.sort()).toEqual(["budgets", "transactions"]);
+    delete (mockedRepo as unknown as Record<string, unknown>).subscribe;
+  });
+
+  test("updates for a family the user has left are ignored", async () => {
+    let push: (rows: Array<Record<string, unknown>>) => void = () => {};
+    (mockedRepo as unknown as Record<string, unknown>).subscribe = async (
+      _f: string,
+      collection: string,
+      onRows: (rows: Array<Record<string, unknown>>) => void,
+    ) => {
+      if (collection === "transactions") push = onRows;
+      return () => {};
+    };
+    await startLiveSync("test-family", useApp.setState, useApp.getState);
+    useApp.setState({
+      user: { uid: "x", familyId: "another-family", displayName: null, email: null, photoURL: null, role: "admin" },
+      transactions: [],
+    });
+    push([{ ...entry, id: "stale" }]);
+    expect(useApp.getState().transactions).toEqual([]);
+    stopLiveSync();
+    delete (mockedRepo as unknown as Record<string, unknown>).subscribe;
+  });
+});
+
+describe("recurring posting", () => {
+  test("posting writes under the deterministic id and never duplicates", async () => {
+    const rule = {
+      id: "rent", name: "Rent", type: "expense" as const, groupId: "home", subGroupId: null,
+      paymentSourceId: "bank", amount: 18000, remarks: "", dayOfMonth: 5, startPeriod: "2026-11",
+      endPeriod: null, skipped: [], active: true, createdAt: "", updatedAt: "",
+    };
+    const occurrence = { rule, period: "2026-11", date: "2026-11-05", id: "rec-rent-2026-11" };
+    useApp.setState({ transactions: [] });
+    expect(await useApp.getState().postRecurring([occurrence])).toBe(1);
+    expect(await useApp.getState().postRecurring([occurrence])).toBe(1);
+    expect(set.mock.calls.map((c) => (c as unknown[])[2])).toEqual(["rec-rent-2026-11", "rec-rent-2026-11"]);
+    expect(useApp.getState().transactions.map((t) => t.id)).toEqual(["rec-rent-2026-11"]);
+  });
+
+  test("skipping a month records it on the rule", async () => {
+    useApp.setState({
+      recurring: [{
+        id: "rent", name: "Rent", type: "expense", groupId: "home", subGroupId: null,
+        paymentSourceId: "bank", amount: 1, remarks: "", dayOfMonth: 5, startPeriod: "2026-11",
+        endPeriod: null, skipped: ["2026-09"], active: true, createdAt: "", updatedAt: "",
+      }],
+    });
+    await useApp.getState().skipRecurring("rent", "2026-10");
+    expect(useApp.getState().recurring[0].skipped).toEqual(["2026-09", "2026-10"]);
+    expect((update.mock.calls[0] as unknown[])[3]).toMatchObject({ skipped: ["2026-09", "2026-10"] });
   });
 });

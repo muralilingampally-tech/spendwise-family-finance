@@ -16,8 +16,14 @@
 - [x] Installable on phones: web manifest, icons, theme colour.
 - [x] Tests for loan maths, date parsing, duplicate detection and master usage.
 
+# Family collaboration and automation
+- [x] Real roles (admin / member / viewer) read from Firestore and never overwritten on sign-in; admins manage them in Settings.
+- [x] Firestore rules validate every write and enforce roles server-side; 15 emulator tests in `firestore-tests/`.
+- [x] Live sync of transactions and budgets between family members (verified against the emulator).
+- [x] Recurring entries (rent, EMIs, SIPs, salary) with idempotent monthly posting, skip, and 12-month catch-up.
+- [x] Loans managed in the app (moved once from the old hard-coded list).
+
 # Next
-- [ ] Read roles from Firestore (everyone is currently admin) — needs a decision on who can delete.
-- [ ] Firestore rules: validate transaction shape on write (needs `firebase deploy`).
-- [ ] Live sync between family members (onSnapshot).
-- [ ] Recurring entries (EMIs, rent, SIPs) and loans managed in-app instead of hard-coded.
+- [ ] Deploy `firestore.rules` (`firebase deploy --only firestore:rules`).
+- [ ] Monthly net-worth trend chart.
+- [ ] Savings goals with progress.

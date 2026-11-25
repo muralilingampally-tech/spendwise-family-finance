@@ -1,7 +1,18 @@
 import { getFirestoreDb, isFirebaseConfigured } from "./firebase";
 import { normalizeDate } from "./format";
 import { SEED_VERSION, buildSeedRows } from "./seed";
-import type { Budget, MasterCollection, MasterItem, Member, Transaction } from "./types";
+import type {
+  Budget,
+  Loan,
+  MasterCollection,
+  MasterItem,
+  Member,
+  RecurringRule,
+  Role,
+  Transaction,
+} from "./types";
+import { LEGACY_LOANS } from "./loans";
+import { isRole } from "./permissions";
 
 export const MASTER_COLLECTIONS: MasterCollection[] = [
   "expenseGroups",
@@ -28,6 +39,18 @@ export interface Repo {
   remove(familyId: string, collection: string, id: string): Promise<void>;
   /** Writes a document under a known id, replacing any existing one. */
   set(familyId: string, collection: string, id: string, data: Record<string, unknown>): Promise<void>;
+  /**
+   * Live updates: calls onRows with the full collection whenever the server
+   * copy changes (including other family members' writes). Local writes that
+   * the server has not confirmed yet are never reported. Returns unsubscribe.
+   * Only the Firestore repo implements it.
+   */
+  subscribe?(
+    familyId: string,
+    collection: string,
+    onRows: (rows: Row[]) => void,
+    onError: (error: Error) => void,
+  ): Promise<() => void>;
 }
 
 /* ------------------------------ local fallback ----------------------------- */
@@ -101,6 +124,20 @@ const firestoreRepo: Repo = {
     const { db, mod } = await getFirestoreDb();
     await mod.setDoc(mod.doc(db, "families", familyId, collection, id), data);
   },
+  async subscribe(familyId, collection, onRows, onError) {
+    const { db, mod } = await getFirestoreDb();
+    return mod.onSnapshot(
+      mod.collection(db, "families", familyId, collection),
+      // Metadata changes are needed to hear "the server confirmed it" after a
+      // snapshot that was skipped for having pending writes.
+      { includeMetadataChanges: true },
+      (snap) => {
+        if (snap.metadata.hasPendingWrites || snap.metadata.fromCache) return;
+        onRows(snap.docs.map((d) => ({ ...(d.data() as Record<string, unknown>), id: d.id })));
+      },
+      onError,
+    );
+  },
 };
 
 export const repo: Repo = isFirebaseConfigured ? firestoreRepo : localRepo;
@@ -121,8 +158,14 @@ export async function loadMasters(familyId: string) {
 
 export async function loadTransactions(familyId: string) {
   const rows = (await repo.list(familyId, "transactions")) as unknown as Transaction[];
-  // Older rows may carry a non-canonical date; normalise on read so filters,
-  // sorting and reports all work on a single yyyy-MM-dd format.
+  return normalizeTransactions(rows);
+}
+
+/**
+ * Older rows may carry a non-canonical date; normalise on read so filters,
+ * sorting and reports all work on a single yyyy-MM-dd format.
+ */
+export function normalizeTransactions(rows: Transaction[]) {
   return rows
     .map((t) => ({ ...t, date: normalizeDate(t.date) ?? t.date }))
     .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
@@ -275,9 +318,19 @@ export async function dedupeMasters(familyId: string): Promise<boolean> {
   return true;
 }
 
-/** Registers the signed-in user as a member of the family (needed by Firestore rules). */
-export async function ensureMembership(uid: string, familyId: string, profile: Record<string, unknown>) {
-  if (!isFirebaseConfigured) return;
+/**
+ * Registers the signed-in user as a member of the family (needed by Firestore
+ * rules) and returns their role. Profile fields are refreshed on every sign-in,
+ * but an existing role is never overwritten, so a role an admin set sticks.
+ * First-time members start as admin; access is already limited to the
+ * allow-listed emails.
+ */
+export async function ensureMembership(
+  uid: string,
+  familyId: string,
+  profile: { email: string | null; displayName: string | null },
+): Promise<Role> {
+  if (!isFirebaseConfigured) return "admin";
   const { db, mod } = await getFirestoreDb();
   await mod.setDoc(
     mod.doc(db, "users", uid),
@@ -285,11 +338,15 @@ export async function ensureMembership(uid: string, familyId: string, profile: R
     { merge: true },
   );
   // Family-scoped member directory so both partners can see each other's names.
-  await mod.setDoc(
-    mod.doc(db, "families", familyId, "members", uid),
-    { ...profile, updatedAt: now() },
-    { merge: true },
-  );
+  const ref = mod.doc(db, "families", familyId, "members", uid);
+  const snap = await mod.getDoc(ref);
+  const existing = snap.exists() ? (snap.data() as { role?: unknown }).role : undefined;
+  if (isRole(existing)) {
+    await mod.setDoc(ref, { ...profile, updatedAt: now() }, { merge: true });
+    return existing;
+  }
+  await mod.setDoc(ref, { ...profile, role: "admin", updatedAt: now() }, { merge: true });
+  return "admin";
 }
 
 export async function loadMembers(familyId: string): Promise<Member[]> {
@@ -300,4 +357,50 @@ export async function loadMembers(familyId: string): Promise<Member[]> {
 export async function loadBudgets(familyId: string): Promise<Budget[]> {
   const rows = (await repo.list(familyId, "budgets")) as unknown as Budget[];
   return rows.sort((a, b) => (a.period < b.period ? 1 : a.period > b.period ? -1 : 0));
+}
+
+export async function loadRecurring(familyId: string): Promise<RecurringRule[]> {
+  const rows = (await repo.list(familyId, "recurring")) as unknown as RecurringRule[];
+  return rows
+    .map((r) => ({ ...r, skipped: r.skipped ?? [], endPeriod: r.endPeriod ?? null }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
+
+export async function loadLoans(familyId: string): Promise<Loan[]> {
+  const rows = (await repo.list(familyId, "loans")) as unknown as Loan[];
+  return rows.sort((a, b) => a.startDate.localeCompare(b.startDate) || a.name.localeCompare(b.name));
+}
+
+const loansSeededKey = (familyId: string) => `spendwise:${familyId}:loansSeeded`;
+
+/**
+ * One-time move of the loans that used to be hard-coded into the family's
+ * own "loans" collection. Written under fixed ids, so two devices running this
+ * at once write the same documents, and a flag stops loans the family later
+ * deletes from coming back.
+ */
+export async function seedLoans(familyId: string) {
+  if (!isFirebaseConfigured) {
+    if (window.localStorage.getItem(loansSeededKey(familyId))) return;
+  } else {
+    const { db, mod } = await getFirestoreDb();
+    const snap = await mod.getDoc(mod.doc(db, "families", familyId, "meta", "loans"));
+    if ((snap.data() as { seeded?: boolean } | undefined)?.seeded) return;
+  }
+  const existing = await repo.list(familyId, "loans");
+  if (existing.length === 0) {
+    for (const { id, ...loan } of LEGACY_LOANS) {
+      await repo.set(familyId, "loans", id, { ...loan, createdAt: now(), updatedAt: now() });
+    }
+  }
+  if (!isFirebaseConfigured) {
+    window.localStorage.setItem(loansSeededKey(familyId), "1");
+  } else {
+    const { db, mod } = await getFirestoreDb();
+    await mod.setDoc(
+      mod.doc(db, "families", familyId, "meta", "loans"),
+      { seeded: true, updatedAt: now() },
+      { merge: true },
+    );
+  }
 }

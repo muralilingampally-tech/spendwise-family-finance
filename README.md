@@ -618,3 +618,31 @@ cd <repository-name>
 npm i
 npm run dev
 ```
+
+## Firestore security rules
+
+`firestore.rules` is enforced by Firebase itself, so Lovable does not deploy it. After changing the rules, deploy them once:
+
+```sh
+npm i -g firebase-tools        # once
+firebase login                 # once
+firebase deploy --only firestore:rules --project spendwise-1d96c
+```
+
+The rules allow only the listed emails, check the shape of every entry, budget, recurring entry and loan, and enforce roles on the server:
+
+| Role   | Can                                                                 |
+| ------ | ------------------------------------------------------------------- |
+| Admin  | Everything, including deleting and changing other members' roles    |
+| Member | Add and edit entries, budgets, recurring entries and loans; no deletes |
+| Viewer | Read only                                                           |
+
+Members who signed in before roles existed are admins. Nobody can change their own role. Admins change roles in **Settings → Members**.
+
+Test the rules against the local emulator (needs Java) before deploying:
+
+```sh
+cd firestore-tests
+npm install
+npm test
+```

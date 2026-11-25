@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useApp } from "@/lib/store";
+import { can } from "@/lib/permissions";
 import { inr, monthLabel, previousPeriod, todayISO } from "@/lib/format";
 import type { TransactionType } from "@/lib/types";
 
@@ -40,7 +41,8 @@ const daysInMonth = (period: string) => {
 };
 
 function BudgetPage() {
-  const { masters, transactions, budgets, saveBudget, saveBudgets } = useApp();
+  const { masters, transactions, budgets, saveBudget, saveBudgets, user } = useApp();
+  const canWrite = can(user?.role, "write");
   const [period, setPeriod] = useState(() => todayISO().slice(0, 7));
   const [type, setType] = useState<TransactionType>("expense");
   const [drafts, setDrafts] = useState<Record<string, string>>({});
@@ -173,11 +175,11 @@ function BudgetPage() {
       title="Budget vs Actual"
       actions={
         <div className="flex flex-wrap gap-2">
-          <Button size="sm" variant="outline" onClick={copyPrevious} disabled={saving !== null}>
+          <Button size="sm" variant="outline" onClick={copyPrevious} disabled={!canWrite || saving !== null}>
             <Copy className="mr-2 h-4 w-4" />
             Copy {monthLabel(prev)}
           </Button>
-          <Button size="sm" onClick={saveAll} disabled={saving !== null}>
+          <Button size="sm" onClick={saveAll} disabled={!canWrite || saving !== null}>
             <Save className="mr-2 h-4 w-4" />
             {saving === "all" ? "Saving…" : "Save all"}
           </Button>
@@ -258,6 +260,7 @@ function BudgetPage() {
                         className="h-8 w-28"
                         inputMode="decimal"
                         placeholder="0"
+                        disabled={!canWrite}
                         value={drafts[r.id] ?? ""}
                         onChange={(e) =>
                           setDrafts((d) => ({ ...d, [r.id]: e.target.value }))

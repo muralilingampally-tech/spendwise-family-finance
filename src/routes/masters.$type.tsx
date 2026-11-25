@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/dialog";
 import { useApp } from "@/lib/store";
 import { masterUsage, usageBlocker } from "@/lib/masterUsage";
+import { can } from "@/lib/permissions";
 import { PAYMENT_SOURCE_KINDS } from "@/lib/seed";
 import { MASTER_LABELS, MASTER_SLUGS, type MasterItem } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -81,7 +82,7 @@ function MastersPage() {
     return masters[collection].filter((m) => !q || m.name.toLowerCase().includes(q));
   }, [masters, collection, search]);
 
-  const isAdmin = user?.role === "admin";
+  const isAdmin = can(user?.role, "manageMasters");
 
   const remove = async (item: MasterItem) => {
     const blocker = usageBlocker(item.name, masterUsage(item.id, transactions, budgets, masters));

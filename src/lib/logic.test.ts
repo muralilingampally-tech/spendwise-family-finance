@@ -1,9 +1,10 @@
 /// <reference types="bun" />
 import { describe, expect, test } from "bun:test";
 import { normalizeDate, previousPeriod } from "./format";
-import { LOANS, loanStatus } from "./loans";
+import { LEGACY_LOANS as LOANS, loanStatus } from "./loans";
 import { findSavedDuplicates } from "./duplicates";
 import { masterUsage, usageBlocker } from "./masterUsage";
+import { dueOccurrences, occurrenceDate, occurrenceId, occurrenceTransaction } from "./recurring";
 import type { MasterCollection, MasterItem, Transaction } from "./types";
 
 const txn = (over: Partial<Transaction>): Transaction => ({
@@ -179,5 +180,71 @@ describe("masterUsage", () => {
       '"Food" is used by 2 transactions, 1 budget. Move or delete those first, or rename it instead.',
     );
     expect(usageBlocker("Spare", { transactions: 0, budgets: 0, children: 0 })).toBeNull();
+  });
+});
+
+describe("recurring entries", () => {
+  const rule = {
+    id: "rent",
+    name: "Rent",
+    type: "expense" as const,
+    groupId: "home",
+    subGroupId: null,
+    paymentSourceId: "bank",
+    amount: 18000,
+    remarks: "",
+    dayOfMonth: 5,
+    startPeriod: "2026-09",
+    endPeriod: null,
+    skipped: [] as string[],
+    active: true,
+    createdAt: "",
+    updatedAt: "",
+  };
+
+  test("lists every unposted month up to today, oldest first", () => {
+    const due = dueOccurrences([rule], [], "2026-11-25");
+    expect(due.map((o) => o.date)).toEqual(["2026-09-05", "2026-10-05", "2026-11-05"]);
+    expect(due[0].id).toBe("rec-rent-2026-09");
+  });
+
+  test("this month is not due before its day", () => {
+    expect(dueOccurrences([rule], [], "2026-11-04").map((o) => o.period)).toEqual([
+      "2026-09",
+      "2026-10",
+    ]);
+  });
+
+  test("posted, skipped and out-of-range months are not due", () => {
+    const posted = [{ id: occurrenceId("rent", "2026-09") }];
+    const r = { ...rule, skipped: ["2026-10"], endPeriod: "2026-10" };
+    expect(dueOccurrences([r], posted, "2026-11-25")).toEqual([]);
+    expect(dueOccurrences([{ ...rule, active: false }], [], "2026-11-25")).toEqual([]);
+  });
+
+  test("catch-up is limited to the last 12 months", () => {
+    const due = dueOccurrences([{ ...rule, startPeriod: "2020-01" }], [], "2026-11-25");
+    expect(due).toHaveLength(12);
+    expect(due[0].period).toBe("2025-12");
+  });
+
+  test("short months post on their last day", () => {
+    expect(occurrenceDate(31, "2026-02")).toBe("2026-02-28");
+    expect(occurrenceDate(31, "2028-02")).toBe("2028-02-29");
+    expect(occurrenceDate(31, "2026-04")).toBe("2026-04-30");
+  });
+
+  test("the posted entry carries the rule's details and its deterministic id", () => {
+    const [o] = dueOccurrences([rule], [], "2026-09-30");
+    const t = occurrenceTransaction(o, { uid: "u", name: "Me" }, "now");
+    expect(t).toMatchObject({
+      id: "rec-rent-2026-09",
+      date: "2026-09-05",
+      amount: 18000,
+      groupId: "home",
+      paymentSourceId: "bank",
+      remarks: "Rent",
+      createdBy: "u",
+    });
   });
 });

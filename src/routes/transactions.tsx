@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMemo, useRef, useState, type ChangeEvent } from "react";
 import { useShallow } from "zustand/react/shallow";
 import { useForm } from "react-hook-form";
@@ -22,6 +22,8 @@ import { NECESSITY_GROUPS } from "@/lib/seed";
 import type { Necessity, Transaction, TransactionType } from "@/lib/types";
 import { buildTransactionsWorkbook, downloadBlob, readWorkbookRows } from "@/lib/excel";
 import { findSavedDuplicates } from "@/lib/duplicates";
+import { can } from "@/lib/permissions";
+import { dueOccurrences } from "@/lib/recurring";
 
 /** The type and payment source of the last entry added on this device. */
 const LAST_ENTRY_KEY = "spendwise:last-entry";
@@ -147,6 +149,7 @@ function TransactionsPage() {
     bulkImportTransactions,
     deleteTransaction,
     restoreTransaction,
+    recurring,
     user,
   } = useApp(useShallow((state) => ({
     transactions: state.transactions,
@@ -156,6 +159,7 @@ function TransactionsPage() {
     bulkImportTransactions: state.bulkImportTransactions,
     deleteTransaction: state.deleteTransaction,
     restoreTransaction: state.restoreTransaction,
+    recurring: state.recurring,
     user: state.user,
   })));
   const [open, setOpen] = useState(false);
@@ -350,7 +354,12 @@ function TransactionsPage() {
     }
   });
 
-  const canDelete = user?.role === "admin";
+  const canDelete = can(user?.role, "delete");
+  const canWrite = can(user?.role, "write");
+  const dueCount = useMemo(
+    () => dueOccurrences(recurring, transactions, todayISO()).length,
+    [recurring, transactions],
+  );
 
   const removeWithUndo = async (t: Transaction) => {
     try {
@@ -669,9 +678,11 @@ function TransactionsPage() {
           <Button size="sm" variant="outline" onClick={exportExcel} disabled={filtered.length === 0}>
             <Download className="mr-1 h-4 w-4" /> Export Excel
           </Button>
-          <Button size="sm" variant="outline" onClick={() => fileInputRef.current?.click()} disabled={importing}>
-            <Upload className="mr-1 h-4 w-4" /> {importing ? "Importing…" : "Import Excel / CSV"}
-          </Button>
+          {canWrite && (
+            <Button size="sm" variant="outline" onClick={() => fileInputRef.current?.click()} disabled={importing}>
+              <Upload className="mr-1 h-4 w-4" /> {importing ? "Importing…" : "Import Excel / CSV"}
+            </Button>
+          )}
           <input
             ref={fileInputRef}
             type="file"
@@ -679,12 +690,28 @@ function TransactionsPage() {
             className="hidden"
             onChange={importCsv}
           />
-          <Button size="sm" onClick={openNew}>
-            <Plus className="mr-1 h-4 w-4" /> New
-          </Button>
+          {canWrite && (
+            <Button size="sm" onClick={openNew}>
+              <Plus className="mr-1 h-4 w-4" /> New
+            </Button>
+          )}
         </div>
       }
     >
+      {canWrite && dueCount > 0 && (
+        <Link
+          to="/recurring"
+          className="mb-4 flex items-center justify-between gap-3 rounded-xl border border-primary/30 bg-primary/5 px-4 py-3 text-sm hover:bg-primary/10"
+        >
+          <span>
+            <span className="font-semibold">
+              {dueCount} recurring entr{dueCount === 1 ? "y is" : "ies are"} due
+            </span>{" "}
+            <span className="text-muted-foreground">(rent, EMIs, SIPs…)</span>
+          </span>
+          <span className="font-medium text-primary">Review and post →</span>
+        </Link>
+      )}
       <div className="card-surface grid gap-3 p-4 md:grid-cols-3 lg:grid-cols-6">
         <Input
           placeholder="Search remarks, amount, category…"
@@ -791,9 +818,11 @@ function TransactionsPage() {
                 </td>
                 <td className="px-4 py-3">
                   <div className="flex justify-end gap-1">
-                    <Button size="icon" variant="ghost" onClick={() => openEdit(t)} aria-label="Edit">
-                      <Pencil className="h-4 w-4" />
-                    </Button>
+                    {canWrite && (
+                      <Button size="icon" variant="ghost" onClick={() => openEdit(t)} aria-label="Edit">
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                    )}
                     {canDelete && (
                       <Button
                         size="icon"

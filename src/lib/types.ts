@@ -96,3 +96,47 @@ export const MASTER_SLUGS: Record<string, MasterCollection> = {
   "investment-sub-groups": "investmentSubGroups",
   "payment-sources": "paymentSources",
 };
+/**
+ * A rule that creates the same entry every month (EMI, rent, SIP, salary).
+ * Each month's entry is stored with the id `rec-<ruleId>-<yyyy-MM>`, so posting
+ * the same month twice, from any device, can never create a duplicate.
+ */
+export interface RecurringRule {
+  id: string;
+  name: string;
+  type: TransactionType;
+  groupId: string;
+  subGroupId: string | null;
+  paymentSourceId: string;
+  amount: number;
+  remarks: string;
+  /** 1-31; months that are shorter post on their last day. */
+  dayOfMonth: number;
+  /** yyyy-MM: first month to post. */
+  startPeriod: string;
+  /** yyyy-MM: last month to post, or null for no end. */
+  endPeriod: string | null;
+  /** Months the family chose not to post. */
+  skipped: string[];
+  active: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** A loan tracked on the Net Worth page. EMIs are matched by sub group name. */
+export interface Loan {
+  id: string;
+  name: string;
+  /** Sub group under the "Loans" expense group that its payments use. */
+  subGroupName: string;
+  principal: number;
+  /** Annual rate as a fraction, e.g. 0.0999 for 9.99%. */
+  annualRate: number;
+  /** yyyy-MM-dd: balance baseline. */
+  startDate: string;
+  /** emi: monthly interest per payment; daily: interest on the daily balance. */
+  method: "emi" | "daily";
+  note: string;
+  createdAt?: string;
+  updatedAt?: string;
+}

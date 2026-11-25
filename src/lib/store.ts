@@ -4,13 +4,28 @@ import {
   dedupeMasters,
   ensureMembership,
   loadBudgets,
+  loadLoans,
+  loadRecurring,
+  seedLoans,
   loadMasters,
   loadMembers,
   loadTransactions,
+  normalizeTransactions,
   repo,
   seedFamilyMasters,
 } from "./repo";
-import type { AppUser, Budget, MasterCollection, MasterItem, Member, Transaction } from "./types";
+import type {
+  AppUser,
+  Budget,
+  Loan,
+  MasterCollection,
+  MasterItem,
+  Member,
+  RecurringRule,
+  Role,
+  Transaction,
+} from "./types";
+import { occurrenceTransaction, type Occurrence } from "./recurring";
 import { normalizeDate } from "./format";
 
 const emptyMasters = {
@@ -45,6 +60,8 @@ interface AppState {
   transactions: Transaction[];
   members: Member[];
   budgets: Budget[];
+  recurring: RecurringRule[];
+  loans: Loan[];
   init: () => void;
   signInWithGoogle: () => Promise<void>;
   signInWithEmail: (email: string, password: string) => Promise<void>;
@@ -67,6 +84,15 @@ interface AppState {
   /** Saves several budgets; rows that saved are kept even if one fails. */
   saveBudgets: (values: BudgetInput[]) => Promise<void>;
   deleteBudget: (id: string) => Promise<void>;
+  saveRecurring: (values: Partial<RecurringRule>, id?: string) => Promise<void>;
+  deleteRecurring: (id: string) => Promise<void>;
+  /** Posts due months as entries; safe to repeat (deterministic ids). */
+  postRecurring: (occurrences: Occurrence[]) => Promise<number>;
+  skipRecurring: (ruleId: string, period: string) => Promise<void>;
+  saveLoan: (values: Partial<Loan>, id?: string) => Promise<void>;
+  deleteLoan: (id: string) => Promise<void>;
+  /** Admin only: change another member's role. */
+  setMemberRole: (uid: string, role: Role) => Promise<void>;
 }
 
 type BudgetInput = Partial<Budget> & { period: string; groupId: string };
@@ -74,8 +100,50 @@ type BudgetInput = Partial<Budget> & { period: string; groupId: string };
 const byName = (a: MasterItem, b: MasterItem) => a.name.localeCompare(b.name);
 const byDateDesc = (a: Transaction, b: Transaction) => b.date.localeCompare(a.date);
 const byPeriodDesc = (a: Budget, b: Budget) => b.period.localeCompare(a.period);
+const byRuleName = (a: RecurringRule, b: RecurringRule) => a.name.localeCompare(b.name);
 
 let initialised = false;
+
+/** Live listeners for the signed-in family; replaced on every sign-in. */
+let unsubscribers: Array<() => void> = [];
+export function stopLiveSync() {
+  unsubscribers.forEach((stop) => stop());
+  unsubscribers = [];
+}
+
+/** Keeps transactions and budgets in step with other family members' writes. */
+export async function startLiveSync(
+  familyId: string,
+  set: (partial: Partial<AppState>) => void,
+  get: () => AppState,
+) {
+  stopLiveSync();
+  if (!repo.subscribe) return;
+  const sameFamily = () => get().user?.familyId === familyId;
+  const onError = (error: Error) => console.error("Live sync stopped", error);
+  const stops = await Promise.all([
+    repo.subscribe(
+      familyId,
+      "transactions",
+      (rows) => {
+        if (!sameFamily()) return;
+        set({ transactions: normalizeTransactions(rows as unknown as Transaction[]) });
+      },
+      onError,
+    ),
+    repo.subscribe(
+      familyId,
+      "budgets",
+      (rows) => {
+        if (!sameFamily()) return;
+        set({ budgets: (rows as unknown as Budget[]).sort(byPeriodDesc) });
+      },
+      onError,
+    ),
+  ]);
+  if (sameFamily()) unsubscribers = stops;
+  else stops.forEach((stop) => stop());
+}
 
 export const useApp = create<AppState>((set, get) => ({
   ready: false,
@@ -87,6 +155,8 @@ export const useApp = create<AppState>((set, get) => ({
   transactions: [],
   members: [],
   budgets: [],
+  recurring: [],
+  loans: [],
 
   init: () => {
     if (initialised || typeof window === "undefined") return;
@@ -97,6 +167,7 @@ export const useApp = create<AppState>((set, get) => ({
       if (user) {
         try {
           await seedFamilyMasters(user.familyId);
+          await seedLoans(user.familyId);
           set({ dataError: null });
         } catch (error) {
           console.error("Seeding master data failed", error);
@@ -114,11 +185,22 @@ export const useApp = create<AppState>((set, get) => ({
         }
         // Merging duplicate masters scans every collection, so it runs after
         // the app is usable and reloads only if it actually changed something.
+        void startLiveSync(user.familyId, set, get).catch((error) =>
+          console.error("Starting live sync failed", error),
+        );
         void dedupeMasters(user.familyId)
           .then((changed) => (changed ? get().refresh() : undefined))
           .catch((error) => console.error("Merging duplicate masters failed", error));
       } else {
-        set({ masters: emptyMasters, transactions: [], members: [], budgets: [] });
+        stopLiveSync();
+        set({
+          masters: emptyMasters,
+          transactions: [],
+          members: [],
+          budgets: [],
+          recurring: [],
+          loans: [],
+        });
       }
       set({ ready: true });
     };
@@ -141,11 +223,13 @@ export const useApp = create<AppState>((set, get) => ({
             return boot(null);
           }
           const familyId = sharedFamilyId ?? fbUser.uid;
+          // If the role cannot be read, fall back to the least surprising
+          // safe default: can add entries, cannot delete or manage.
+          let role: Role = "member";
           try {
-            await ensureMembership(fbUser.uid, familyId, {
+            role = await ensureMembership(fbUser.uid, familyId, {
               email: fbUser.email,
               displayName: fbUser.displayName ?? fbUser.email,
-              role: "admin",
             });
           } catch (error) {
             console.error("Registering membership failed", error);
@@ -156,7 +240,7 @@ export const useApp = create<AppState>((set, get) => ({
             displayName: fbUser.displayName,
             photoURL: fbUser.photoURL,
             familyId,
-            role: "admin",
+            role,
           });
         })();
       });
@@ -205,13 +289,15 @@ export const useApp = create<AppState>((set, get) => ({
     if (!user) return;
     set({ loading: true });
     try {
-      const [masters, transactions, members, budgets] = await Promise.all([
+      const [masters, transactions, members, budgets, recurring, loans] = await Promise.all([
         loadMasters(user.familyId),
         loadTransactions(user.familyId),
         loadMembers(user.familyId).catch(() => [] as Member[]),
         loadBudgets(user.familyId).catch(() => [] as Budget[]),
+        loadRecurring(user.familyId).catch(() => [] as RecurringRule[]),
+        loadLoans(user.familyId).catch(() => [] as Loan[]),
       ]);
-      set({ masters, transactions, members, budgets });
+      set({ masters, transactions, members, budgets, recurring, loans });
     } finally {
       set({ loading: false });
     }
@@ -365,6 +451,104 @@ export const useApp = create<AppState>((set, get) => ({
     if (!user) return;
     await repo.remove(user.familyId, "budgets", id);
     set((state) => ({ budgets: state.budgets.filter((b) => b.id !== id) }));
+  },
+
+  saveRecurring: async (values, id) => {
+    const user = get().user;
+    if (!user) return;
+    if (id) {
+      const patch = { ...values, updatedAt: now() };
+      await repo.update(user.familyId, "recurring", id, patch);
+      set((state) => ({
+        recurring: state.recurring.map((r) => (r.id === id ? { ...r, ...patch } : r)).sort(byRuleName),
+      }));
+    } else {
+      const created = (await repo.create(user.familyId, "recurring", {
+        skipped: [],
+        active: true,
+        endPeriod: null,
+        ...values,
+        createdAt: now(),
+        updatedAt: now(),
+      })) as unknown as RecurringRule;
+      set((state) => ({ recurring: [...state.recurring, created].sort(byRuleName) }));
+    }
+  },
+
+  deleteRecurring: async (id) => {
+    const user = get().user;
+    if (!user) return;
+    await repo.remove(user.familyId, "recurring", id);
+    set((state) => ({ recurring: state.recurring.filter((r) => r.id !== id) }));
+  },
+
+  postRecurring: async (occurrences) => {
+    const user = get().user;
+    if (!user) return 0;
+    const by = { uid: user.uid, name: user.displayName ?? user.email ?? "Unknown" };
+    let posted = 0;
+    for (let offset = 0; offset < occurrences.length; offset += 20) {
+      const batch = occurrences
+        .slice(offset, offset + 20)
+        .map((o) => occurrenceTransaction(o, by, now()));
+      const results = await Promise.allSettled(
+        batch.map(({ id, ...data }) => repo.set(user.familyId, "transactions", id, data)),
+      );
+      const saved = batch.filter((_, i) => results[i].status === "fulfilled");
+      posted += saved.length;
+      const ids = new Set(saved.map((t) => t.id));
+      set((state) => ({
+        transactions: [...saved, ...state.transactions.filter((t) => !ids.has(t.id))].sort(
+          byDateDesc,
+        ),
+      }));
+      const failure = results.find((r) => r.status === "rejected");
+      if (failure?.status === "rejected") throw failure.reason;
+    }
+    return posted;
+  },
+
+  skipRecurring: async (ruleId, period) => {
+    const rule = get().recurring.find((r) => r.id === ruleId);
+    if (!rule) return;
+    const skipped = [...new Set([...(rule.skipped ?? []), period])].sort();
+    await get().saveRecurring({ skipped }, ruleId);
+  },
+
+  saveLoan: async (values, id) => {
+    const user = get().user;
+    if (!user) return;
+    if (id) {
+      const patch = { ...values, updatedAt: now() };
+      await repo.update(user.familyId, "loans", id, patch);
+      set((state) => ({
+        loans: state.loans.map((l) => (l.id === id ? { ...l, ...patch } : l)),
+      }));
+    } else {
+      const created = (await repo.create(user.familyId, "loans", {
+        ...values,
+        createdAt: now(),
+        updatedAt: now(),
+      })) as unknown as Loan;
+      set((state) => ({ loans: [...state.loans, created] }));
+    }
+  },
+
+  deleteLoan: async (id) => {
+    const user = get().user;
+    if (!user) return;
+    await repo.remove(user.familyId, "loans", id);
+    set((state) => ({ loans: state.loans.filter((l) => l.id !== id) }));
+  },
+
+  setMemberRole: async (uid, role) => {
+    const user = get().user;
+    if (!user) return;
+    if (uid === user.uid) throw new Error("You cannot change your own role.");
+    await repo.update(user.familyId, "members", uid, { role, updatedAt: now() });
+    set((state) => ({
+      members: state.members.map((m) => (m.id === uid ? { ...m, role } : m)),
+    }));
   },
 }));
 

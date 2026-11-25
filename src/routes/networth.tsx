@@ -6,7 +6,12 @@ import { Button } from "@/components/ui/button";
 import { useApp } from "@/lib/store";
 import { inr, shortDate, todayISO, toLocalISODate } from "@/lib/format";
 import { signedInvestment } from "@/lib/investment";
-import { LOANS, loanPayments, loanStatus } from "@/lib/loans";
+import { loanPayments, loanStatus } from "@/lib/loans";
+import { can } from "@/lib/permissions";
+import { LoanDialog } from "@/components/LoanDialog";
+import { Pencil, Plus, Trash2 } from "lucide-react";
+import { toast } from "sonner";
+import type { Loan } from "@/lib/types";
 
 export const Route = createFileRoute("/networth")({
   head: () => ({
@@ -25,7 +30,24 @@ export const Route = createFileRoute("/networth")({
 const monthEnd = (d = new Date()) => toLocalISODate(new Date(d.getFullYear(), d.getMonth() + 1, 0));
 
 function NetWorthPage() {
-  const { masters, transactions } = useApp();
+  const { masters, transactions, loans: loanList, user, deleteLoan } = useApp();
+  const canWrite = can(user?.role, "write");
+  const canDelete = can(user?.role, "delete");
+  const [editing, setEditing] = useState<Loan | null>(null);
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const openLoan = (loan: Loan | null) => {
+    setEditing(loan);
+    setDialogOpen(true);
+  };
+  const removeLoan = async (loan: Loan) => {
+    if (!window.confirm(`Remove "${loan.name}" from Net Worth? Its payments stay in Transactions.`)) return;
+    try {
+      await deleteLoan(loan.id);
+      toast.success(`Removed "${loan.name}"`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not remove loan");
+    }
+  };
   const [asOf, setAsOf] = useState(todayISO());
   const [open, setOpen] = useState<string | null>(null);
 
@@ -49,10 +71,10 @@ function NetWorthPage() {
 
   const loans = useMemo(
     () =>
-      LOANS.map((l) =>
+      loanList.map((l) =>
         loanStatus(l, loanPayments(l, transactions, masters.expenseGroups, masters.expenseSubGroups), asOf),
       ),
-    [transactions, masters, asOf],
+    [loanList, transactions, masters, asOf],
   );
   const debt = loans.reduce((s, l) => s + l.outstanding, 0);
 
@@ -83,7 +105,19 @@ function NetWorthPage() {
         </section>
 
         <section className="rounded-xl border border-border bg-card p-4">
-          <h2 className="mb-3 font-semibold">Minus side — loans</h2>
+          <div className="mb-3 flex items-center justify-between gap-2">
+            <h2 className="font-semibold">Minus side — loans</h2>
+            {canWrite && (
+              <Button size="sm" variant="outline" onClick={() => openLoan(null)}>
+                <Plus className="mr-1 h-4 w-4" /> Add loan
+              </Button>
+            )}
+          </div>
+          {loans.length === 0 && (
+            <p className="py-2 text-sm text-muted-foreground">
+              No loans yet. Add one to see what you owe alongside your balance.
+            </p>
+          )}
           {loans.map((s) => (
             <div key={s.loan.id} className="border-b border-border py-2 last:border-0">
               <button className="flex w-full justify-between text-left" onClick={() => setOpen(open === s.loan.id ? null : s.loan.id)}>
@@ -100,6 +134,20 @@ function NetWorthPage() {
                 <span>Interest paid: {inr(s.interestPaid)}</span>
                 {s.accrued > 0 && <span>Interest due: {inr(s.accrued)}</span>}
               </div>
+              {(canWrite || canDelete) && (
+                <div className="mt-1 flex gap-1">
+                  {canWrite && (
+                    <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={() => openLoan(s.loan)}>
+                      <Pencil className="mr-1 h-3 w-3" /> Edit
+                    </Button>
+                  )}
+                  {canDelete && (
+                    <Button size="sm" variant="ghost" className="h-7 px-2 text-xs text-destructive" onClick={() => removeLoan(s.loan)}>
+                      <Trash2 className="mr-1 h-3 w-3" /> Remove
+                    </Button>
+                  )}
+                </div>
+              )}
               {open === s.loan.id && (
                 <ul className="mt-2 space-y-1 text-xs">
                   {s.payments.length === 0 && <li className="text-muted-foreground">No payments under Loans › {s.loan.subGroupName} yet.</li>}
@@ -116,6 +164,7 @@ function NetWorthPage() {
           <Row k="Total outstanding" v={inr(-debt)} bold />
         </section>
       </div>
+      <LoanDialog open={dialogOpen} onOpenChange={setDialogOpen} loan={editing} />
     </AppShell>
   );
 }

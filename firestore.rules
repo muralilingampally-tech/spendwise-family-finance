@@ -1,7 +1,7 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Allow-list of the two accounts that share this workspace. Keep in sync
+    // Allow-list of the accounts that share this workspace. Keep in sync
     // with VITE_ALLOWED_EMAILS / src/lib/firebase.ts.
     function allowed() {
       return request.auth != null &&
@@ -11,16 +11,125 @@ service cloud.firestore {
         ];
     }
 
+    // ---- Roles (keep in sync with src/lib/permissions.ts) -------------------
+    // admin: everything. member: create and edit, no deletes. viewer: read only.
+    function memberDoc(familyId) {
+      return /databases/$(database)/documents/families/$(familyId)/members/$(request.auth.uid);
+    }
+    function role(familyId) {
+      // Members registered before roles existed have no role field: admin.
+      return exists(memberDoc(familyId))
+        ? get(memberDoc(familyId)).data.get('role', 'admin')
+        : 'none';
+    }
+    function canWrite(familyId) {
+      return allowed() && role(familyId) in ['admin', 'member'];
+    }
+    function isAdmin(familyId) {
+      return allowed() && role(familyId) == 'admin';
+    }
+
+    // ---- Shape checks --------------------------------------------------------
+    function isDay(v) { return v is string && v.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$'); }
+    function isMonth(v) { return v is string && v.matches('^[0-9]{4}-[0-9]{2}$'); }
+    function isId(v) { return v is string && v.size() > 0 && v.size() <= 200; }
+    function optId(d, k) { return !(k in d) || d[k] == null || isId(d[k]); }
+    function optText(d, k, n) { return !(k in d) || d[k] == null || (d[k] is string && d[k].size() <= n); }
+    function isAmount(v) { return v is number && v > 0 && v < 10000000000; }
+    function isType(v) { return v in ['income', 'expense', 'investment']; }
+
+    function validTransaction(d) {
+      return isDay(d.date) && isType(d.type) && isAmount(d.amount)
+        && isId(d.groupId) && isId(d.paymentSourceId)
+        && optId(d, 'subGroupId') && optId(d, 'includesId')
+        && optText(d, 'remarks', 500)
+        && (!('necessity' in d) || d.necessity == null || d.necessity in ['essential', 'discretionary']);
+    }
+    function validBudget(d) {
+      return isMonth(d.period) && isId(d.groupId) && d.amount is number
+        && d.amount >= 0 && d.amount < 10000000000 && optText(d, 'notes', 500);
+    }
+    function validRecurring(d) {
+      return d.name is string && d.name.size() > 0 && d.name.size() <= 60
+        && isType(d.type) && isAmount(d.amount)
+        && isId(d.groupId) && isId(d.paymentSourceId) && optId(d, 'subGroupId')
+        && d.dayOfMonth is int && d.dayOfMonth >= 1 && d.dayOfMonth <= 31
+        && isMonth(d.startPeriod) && (d.endPeriod == null || isMonth(d.endPeriod))
+        && d.skipped is list && d.active is bool && optText(d, 'remarks', 500);
+    }
+    function validLoan(d) {
+      return d.name is string && d.name.size() > 0 && d.name.size() <= 60
+        && d.subGroupName is string && isAmount(d.principal)
+        && d.annualRate is number && d.annualRate >= 0 && d.annualRate <= 1
+        && isDay(d.startDate) && d.method in ['emi', 'daily'];
+    }
+    function validMaster(d) {
+      return d.name is string && d.name.size() > 0 && d.name.size() <= 200;
+    }
+
     // A user document is readable/writable only by its owner.
     match /users/{userId} {
       allow read, write: if allowed() && request.auth.uid == userId;
     }
 
     match /families/{familyId} {
-      allow read, write: if allowed();
-      // Masters, transactions and the member directory.
-      match /{document=**} {
-        allow read, write: if allowed();
+      allow read: if allowed();
+      allow write: if isAdmin(familyId);
+
+      // Member directory. Anyone allowed may register themselves; nobody may
+      // change their own role; only an admin may change someone else's.
+      match /members/{uid} {
+        allow read: if allowed();
+        allow create: if allowed() && uid == request.auth.uid
+          && request.resource.data.get('role', 'admin') in ['admin', 'member', 'viewer'];
+        allow update: if allowed() && (
+          (uid == request.auth.uid
+            && request.resource.data.get('role', 'admin') == resource.data.get('role', 'admin'))
+          || (uid != request.auth.uid && isAdmin(familyId)
+            && request.resource.data.get('role', 'admin') in ['admin', 'member', 'viewer'])
+        );
+        allow delete: if isAdmin(familyId) && uid != request.auth.uid;
+      }
+
+      match /transactions/{id} {
+        allow read: if allowed();
+        allow create, update: if canWrite(familyId) && validTransaction(request.resource.data);
+        allow delete: if isAdmin(familyId);
+      }
+
+      match /budgets/{id} {
+        allow read: if allowed();
+        allow create, update: if canWrite(familyId) && validBudget(request.resource.data);
+        allow delete: if isAdmin(familyId);
+      }
+
+      match /recurring/{id} {
+        allow read: if allowed();
+        allow create, update: if canWrite(familyId) && validRecurring(request.resource.data);
+        allow delete: if isAdmin(familyId);
+      }
+
+      match /loans/{id} {
+        allow read: if allowed();
+        allow create, update: if canWrite(familyId) && validLoan(request.resource.data);
+        allow delete: if isAdmin(familyId);
+      }
+
+      // Masters. Creating is allowed to members too, because sign-in may need
+      // to add starter categories; the app only offers editing to admins.
+      match /expenseGroups/{id} { allow read: if allowed(); allow create, update: if canWrite(familyId) && validMaster(request.resource.data); allow delete: if isAdmin(familyId); }
+      match /expenseSubGroups/{id} { allow read: if allowed(); allow create, update: if canWrite(familyId) && validMaster(request.resource.data); allow delete: if isAdmin(familyId); }
+      match /expenseIncludes/{id} { allow read: if allowed(); allow create, update: if canWrite(familyId) && validMaster(request.resource.data); allow delete: if isAdmin(familyId); }
+      match /incomeGroups/{id} { allow read: if allowed(); allow create, update: if canWrite(familyId) && validMaster(request.resource.data); allow delete: if isAdmin(familyId); }
+      match /incomeSubGroups/{id} { allow read: if allowed(); allow create, update: if canWrite(familyId) && validMaster(request.resource.data); allow delete: if isAdmin(familyId); }
+      match /investmentGroups/{id} { allow read: if allowed(); allow create, update: if canWrite(familyId) && validMaster(request.resource.data); allow delete: if isAdmin(familyId); }
+      match /investmentSubGroups/{id} { allow read: if allowed(); allow create, update: if canWrite(familyId) && validMaster(request.resource.data); allow delete: if isAdmin(familyId); }
+      match /paymentSources/{id} { allow read: if allowed(); allow create, update: if canWrite(familyId) && validMaster(request.resource.data); allow delete: if isAdmin(familyId); }
+
+      // Seed version and one-time migration flags.
+      match /meta/{id} {
+        allow read: if allowed();
+        allow write: if canWrite(familyId);
       }
     }
   }
