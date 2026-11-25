@@ -15,6 +15,7 @@
 - [x] New entries remember the last type and payment source on this device.
 - [x] Installable on phones: web manifest, icons, theme colour.
 - [x] Tests for loan maths, date parsing, duplicate detection and master usage.
+- [x] Tab switching keeps the sidebar and header mounted; charts mount after the first paint.
 
 # Family collaboration and automation
 - [x] Real roles (admin / member / viewer) read from Firestore and never overwritten on sign-in; admins manage them in Settings.
